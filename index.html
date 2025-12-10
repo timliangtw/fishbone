@@ -1,528 +1,411 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fishbone Pro - Stable Version</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { Plus, Trash2, Save, FolderOpen, FileText, Printer, Maximize } from 'lucide-react';
+
+// --- Configuration ---
+const STATUS_OPTIONS = {
+  UNVERIFIED: { 
+    id: 'UNVERIFIED', 
+    label: '❓ Unverified', 
+    color: '#64748b', 
+    boneColor: '#94a3b8',
+    bg: 'bg-slate-100 text-slate-600' 
+  },
+  PRECLUDED: { 
+    id: 'PRECLUDED', 
+    label: '❌ Precluded', 
+    color: '#cbd5e1', 
+    boneColor: '#e2e8f0',
+    bg: 'bg-gray-100 text-gray-400 line-through' 
+  },
+  CONCLUDED: { 
+    id: 'CONCLUDED', 
+    label: '✅ Concluded', 
+    color: '#dc2626', 
+    boneColor: '#ef4444',
+    bg: 'bg-red-50 text-red-700 font-bold border-red-200' 
+  }
+};
+
+interface RowData {
+  id: number;
+  category: string; // Primary Bone
+  cause: string;    // Secondary Bone
+  factor: string;   // Specific Factor (Tertiary)
+  method: string;
+  evidence: string;
+  status: keyof typeof STATUS_OPTIONS;
+}
+
+// Demo Data: Chinese Example (Water Heater)
+const DEMO_DATA: RowData[] = [
+  // Group 1: Primary=能源, Secondary=點火系統 (Multiple factors)
+  { id: 1, category: "能源/電力", cause: "點火系統供電", factor: "電池沒電", method: "更換全新電池", evidence: "更換後成功點燃", status: 'CONCLUDED' },
+  { id: 2, category: "能源/電力", cause: "點火系統供電", factor: "電池盒彈簧鏽蝕", method: "目視檢查", evidence: "金屬光澤正常", status: 'PRECLUDED' },
+  { id: 21, category: "能源/電力", cause: "點火系統供電", factor: "接觸不良", method: "重新安裝", evidence: "無效", status: 'PRECLUDED' },
+  
+  // Group 2
+  { id: 3, category: "能源/電力", cause: "瓦斯供應異常", factor: "瓦斯桶沒氣", method: "搖晃確認", evidence: "有氣", status: 'PRECLUDED' },
+  
+  // Group 3: Primary=設備硬體
+  { id: 4, category: "設備硬體", cause: "點火針故障", factor: "點火針積碳", method: "清潔測試", evidence: "無效", status: 'PRECLUDED' },
+  { id: 5, category: "設備硬體", cause: "水盤異常", factor: "皮膜破裂", method: "拆機", evidence: "待確認", status: 'UNVERIFIED' },
+  { id: 6, category: "人為操作", cause: "模式設定錯誤", factor: "誤切夏天模式", method: "檢查面板", evidence: "正常", status: 'PRECLUDED' },
+];
+
+// Rich Text Editor
+const RichTextEditor = ({ value, onChange }: { value: string, onChange: (val: string) => void }) => {
+  const editorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+        if (value === '' || value === '<p><br></p>' || Math.abs(editorRef.current.innerHTML.length - value.length) > 10) {
+             editorRef.current.innerHTML = value;
+        }
+    }
+  }, [value]);
+  const handleInput = () => editorRef.current && onChange(editorRef.current.innerHTML);
+  const exec = (cmd: string, val?: string) => { document.execCommand(cmd, false, val); editorRef.current?.focus(); };
+  
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        e.preventDefault();
+        const blob = items[i].getAsFile();
+        if (blob) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              document.execCommand('insertHTML', false, `<img src="${ev.target?.result}" style="max-width:100%; border-radius: 8px; margin: 10px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />`);
+              handleInput();
+            };
+            reader.readAsDataURL(blob);
+        }
+      }
+    }
+  };
+
+  return (
+    <div className="w-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6 print:border-none print:shadow-none">
+      <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 flex items-center gap-2 print:hidden">
+        <span className="text-xs font-bold text-slate-400 mr-2 uppercase">Project Notes</span>
+        <button onClick={() => exec('bold')} className="p-1 hover:bg-white rounded font-bold border border-transparent">B</button>
+        <button onClick={() => exec('italic')} className="p-1 hover:bg-white rounded italic border border-transparent">I</button>
+        <button onClick={() => exec('foreColor', '#ef4444')} className="w-4 h-4 rounded-full bg-red-500"></button>
+        <button onClick={() => exec('foreColor', '#3b82f6')} className="w-4 h-4 rounded-full bg-blue-500"></button>
+        <button onClick={() => exec('foreColor', '#000000')} className="w-4 h-4 rounded-full bg-black"></button>
+      </div>
+      <div ref={editorRef} contentEditable className="p-6 min-h-[150px] outline-none text-slate-700 text-sm print:p-0" onInput={handleInput} onPaste={handlePaste} dangerouslySetInnerHTML={{__html: value}} />
+    </div>
+  );
+};
+
+const App = () => {
+  const [problem, setProblem] = useState("熱水器不熱");
+  const [rows, setRows] = useState<RowData[]>(DEMO_DATA);
+  const [notes, setNotes] = useState("<div>Notes...</div>");
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- Actions ---
+  const handleRowChange = (id: number, field: keyof RowData, value: string) => setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
+  const insertRowAfter = (index: number) => {
+    const currentRow = rows[index];
+    const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
+    const newRows = [...rows];
+    newRows.splice(index + 1, 0, { ...currentRow, id: newId, factor: "New Factor", method: "", evidence: "", status: 'UNVERIFIED' });
+    setRows(newRows);
+  };
+  const deleteRow = (id: number) => setRows(rows.filter(r => r.id !== id));
+  const addFirstRow = () => setRows([{ id: 1, category: "Primary", cause: "Secondary", factor: "Factor", method: "", evidence: "", status: 'UNVERIFIED' }]);
+  const clearData = () => { if(confirm("Clear all data?")) { setRows([]); setNotes(""); }};
+
+  // --- File/Print ---
+  const handleSave = () => {
+    const blob = new Blob([JSON.stringify({ problem, rows, notes, version: "2.4-ZigZag" }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `RCA_${problem}.json`;
+    link.click();
+  };
+  const handleLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target?.result as string);
+        if(data.problem) setProblem(data.problem);
+        if(data.rows) setRows(data.rows);
+        if(data.notes) setNotes(data.notes);
+      } catch (err) { alert("Invalid file"); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+  const handlePrint = () => { setScale(0.85); setPan({x:0, y:0}); setTimeout(() => window.print(), 100); };
+
+  // --- Data Structure (Grouping) ---
+  const fishboneStructure = useMemo(() => {
+    const catGroups: { [key: string]: RowData[] } = {};
+    rows.forEach(row => {
+      const cat = row.category || "Uncategorized";
+      if (!catGroups[cat]) catGroups[cat] = [];
+      catGroups[cat].push(row);
+    });
+
+    return Object.entries(catGroups).map(([catName, catRows]) => {
+      const causeGroups: { [key: string]: RowData[] } = {};
+      catRows.forEach(row => {
+        const cause = row.cause || "Unspecified";
+        if (!causeGroups[cause]) causeGroups[cause] = [];
+        causeGroups[cause].push(row);
+      });
+
+      return {
+        name: catName,
+        causes: Object.entries(causeGroups).map(([causeName, factors]) => ({
+          name: causeName,
+          factors: factors
+        }))
+      };
+    });
+  }, [rows]);
+
+  // --- Rendering Configuration ---
+  const CONFIG = {
+    baseWidth: 1200, height: 750, spineY: 375, 
+    headX_Offset: 150, spineStart: 100, 
+    categorySpacing: 350,  
+    factorSpacing: 80,    // Spacing along the secondary bone
+    secondaryBaseLen: 160, 
+    secondaryPadding: 60
+  };
+
+  const renderFishbone = () => {
+    const dynamicHeadX = Math.max(
+        CONFIG.baseWidth - CONFIG.headX_Offset, 
+        200 + fishboneStructure.length * CONFIG.categorySpacing
+    );
+    const dynamicWidth = dynamicHeadX + 300;
+    const elements: JSX.Element[] = [];
+
+    // Tail & Spine
+    elements.push(<path key="tail" d={`M ${CONFIG.spineStart} ${CONFIG.spineY} L ${CONFIG.spineStart - 60} ${CONFIG.spineY - 50} Q ${CONFIG.spineStart - 40} ${CONFIG.spineY} ${CONFIG.spineStart - 60} ${CONFIG.spineY + 50} Z`} fill="#3b82f6" opacity="0.8" />);
+    elements.push(<line key="spine" x1={CONFIG.spineStart} y1={CONFIG.spineY} x2={dynamicHeadX} y2={CONFIG.spineY} stroke="#475569" strokeWidth="6" strokeLinecap="round" />);
     
-    <style>
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f5f5f7;
-            color: #1d1d1f;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
+    // Head
+    elements.push(
+      <g key="head">
+         <path d={`M ${dynamicHeadX} ${CONFIG.spineY - 90} L ${dynamicHeadX + 240} ${CONFIG.spineY} L ${dynamicHeadX} ${CONFIG.spineY + 90} Q ${dynamicHeadX - 40} ${CONFIG.spineY} ${dynamicHeadX} ${CONFIG.spineY - 90} Z`} fill="#3b82f6" className="drop-shadow-xl" />
+        <circle cx={dynamicHeadX + 160} cy={CONFIG.spineY - 20} r="10" fill="white" />
+        <circle cx={dynamicHeadX + 160} cy={CONFIG.spineY - 20} r="4" fill="black" />
+        <foreignObject x={dynamicHeadX - 30} y={CONFIG.spineY - 70} width={260} height={140} style={{pointerEvents: 'none'}}>
+          <div className="flex items-center justify-center h-full px-4 text-center">
+             <span className="text-white font-bold text-xl leading-tight drop-shadow-md">{problem}</span>
+          </div>
+        </foreignObject>
+      </g>
+    );
+
+    let currentX = dynamicHeadX - 260;
+
+    // Loop Primary Bones (Categories)
+    fishboneStructure.forEach((catGroup, index) => {
+      const isTop = index % 2 === 0;
+      
+      // Calculate layout for Primary Bone
+      let totalSpacingNeeded = 0;
+      catGroup.causes.forEach(cause => {
+          totalSpacingNeeded += 100;
+      });
+      
+      const boneLength = Math.max(280, totalSpacingNeeded + 120);
+      
+      const startY = CONFIG.spineY;
+      const endY = isTop ? startY - boneLength : startY + boneLength;
+      const boneEndX = currentX - (boneLength * 0.45); 
+
+      // Draw Primary Bone
+      elements.push(
+        <g key={`cat-${index}`}>
+          <line x1={currentX} y1={startY} x2={boneEndX} y2={endY} stroke="#64748b" strokeWidth="4" strokeLinecap="round" />
+          <g transform={`translate(${boneEndX}, ${isTop ? endY - 40 : endY + 20})`}>
+            <rect x="-70" y="-10" width="140" height="34" rx="17" fill="white" stroke="#cbd5e1" strokeWidth="1" className="drop-shadow-sm" />
+            <text x="0" y="13" textAnchor="middle" fontWeight="bold" fill="#1e293b" fontSize="14">{catGroup.name}</text>
+          </g>
+        </g>
+      );
+
+      // Loop Secondary Bones (Causes)
+      let distFromSpine = 70; 
+
+      catGroup.causes.forEach((causeGroup, cIndex) => {
+        const totalDist = Math.sqrt(Math.pow(boneEndX - currentX, 2) + Math.pow(endY - startY, 2));
+        const t = distFromSpine / totalDist;
         
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        const rootX = currentX + (boneEndX - currentX) * t;
+        const rootY = startY + (endY - startY) * t;
 
-        .apple-input {
-            transition: all 0.2s ease;
-            background: transparent;
-            border-radius: 8px;
-        }
-        .apple-input:focus {
-            background: #ffffff;
-            box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.15);
-            outline: none;
-        }
-        .apple-input:hover:not(:focus) { background: rgba(0,0,0,0.03); }
+        const factorsCount = causeGroup.factors.length;
+        const causeLen = CONFIG.secondaryBaseLen + (Math.max(0, factorsCount - 1) * CONFIG.factorSpacing) + CONFIG.secondaryPadding;
+        
+        const causeEndX = rootX + causeLen; 
+        const causeEndY = rootY;
 
-        .glass {
-            background: rgba(255, 255, 255, 0.75);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.4);
-        }
+        // Draw Secondary Bone
+        elements.push(
+            <g key={`cause-${index}-${cIndex}`}>
+                <line x1={rootX} y1={rootY} x2={causeEndX} y2={causeEndY} stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" />
+                <text x={causeEndX + 8} y={causeEndY + 5} fontSize="14" fontWeight="bold" fill="#334155" textAnchor="start">{causeGroup.name}</text>
+            </g>
+        );
 
-        .editor-content {
-            min-height: 200px;
-            outline: none;
-            line-height: 1.6;
-        }
-        .editor-content img {
-            max-width: 100%;
-            border-radius: 8px;
-            margin: 10px 0;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        /* --- PRINT STYLES --- */
-        @media print {
-            body { background-color: white; }
-            .no-print { display: none !important; }
-            .print-expand { 
-                height: auto !important; 
-                overflow: visible !important; 
-                max-height: none !important;
-            }
-            .print-border-none { border: none !important; box-shadow: none !important; }
-            .print-bg-white { background: white !important; }
-            svg { transform: scale(1) !important; width: 100% !important; height: auto !important; }
-            table { min-width: 100% !important; }
-            th, td { padding: 8px 4px !important; font-size: 12px !important; }
-            input, select, textarea {
-                border: none !important;
-                background: transparent !important;
-                appearance: none;
-                padding: 0 !important;
-            }
-            .page-break-inside-avoid { break-inside: avoid; }
-        }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
-
-    <script type="text/babel">
-        const { useState, useMemo, useRef, useEffect } = React;
-
-        // --- Constants ---
-        const COLORS = {
-            blue: '#0071e3',
-            black: '#1d1d1f',
-            gray: '#86868b',
-            lightGray: '#f5f5f7',
-            red: '#ff3b30',
-            green: '#34c759',
-            bone: '#424245'
-        };
-
-        const STATUS_OPTIONS = {
-            PENDING: { id: 'PENDING', label: 'Pending', color: COLORS.red, bg: 'bg-red-50 text-red-600' },
-            DONE: { id: 'DONE', label: 'Done', color: COLORS.green, bg: 'bg-green-50 text-green-600' },
-            NA: { id: 'NA', label: 'N/A', color: COLORS.gray, bg: 'bg-gray-100 text-gray-500' }
-        };
-
-        const DEFAULT_DATA = [
-            { id: 1, category: "Energy", cause: "Gas tank empty", verify: "Check gas level", note: "Need to call supplier", status: 'DONE' },
-            { id: 2, category: "Energy", cause: "Battery dead", verify: "Replace battery", note: "Use alkaline only", status: 'PENDING' },
-            { id: 3, category: "Equipment", cause: "Ignition carbon", verify: "Clean spark pin", note: "", status: 'PENDING' },
-            { id: 4, category: "Equipment", cause: "Diaphragm broken", verify: "Inspect diaphragm", note: "Requires technician", status: 'NA' },
-            { id: 5, category: "Environment", cause: "High water pressure", verify: "Adjust inlet valve", note: "", status: 'DONE' },
-        ];
-
-        const STORAGE_KEY = 'FISHBONE_PRO_DATA_V1';
-
-        // --- Rich Text Editor Component ---
-        const RichTextEditor = ({ value, onChange }) => {
-            const editorRef = useRef(null);
+        // Loop Tertiary Bones (Factors) - Zig-Zag (Alternating Up/Down)
+        causeGroup.factors.forEach((factor, fIndex) => {
+            const factorRootX = rootX + 40 + (fIndex * CONFIG.factorSpacing);
+            const factorRootY = rootY;
             
-            // Fix: Only set HTML on mount. We rely on the parent changing the 'key' prop 
-            // to force a re-mount when loading a new file. This prevents cursor jumping issues.
-            useEffect(() => {
-                if (editorRef.current) {
-                    editorRef.current.innerHTML = value || '<div>Write project notes here, or <b>Ctrl+V to paste screenshots</b>...</div>';
-                }
-            }, []); 
-
-            const handleInput = () => {
-                if (editorRef.current) {
-                    onChange(editorRef.current.innerHTML);
-                }
-            };
+            // Alternating Up/Down logic
+            // fIndex 0: Up, fIndex 1: Down, ...
+            const isUp = fIndex % 2 === 0;
+            const branchLen = 40; // Slightly longer for clarity
             
-            const exec = (command, value = null) => {
-                document.execCommand(command, false, value);
-                editorRef.current.focus();
-            };
+            const branchEndY = isUp ? factorRootY - branchLen : factorRootY + branchLen;
+            const branchEndX = factorRootX + 20; 
 
-            const handlePaste = (e) => {
-                const items = e.clipboardData.items;
-                for (let i = 0; i < items.length; i++) {
-                    if (items[i].type.indexOf("image") !== -1) {
-                        e.preventDefault();
-                        const blob = items[i].getAsFile();
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                            const img = `<img src="${event.target.result}" style="max-width:100%; display:block;" />`;
-                            document.execCommand('insertHTML', false, img);
-                            handleInput(); 
-                        };
-                        reader.readAsDataURL(blob);
-                    }
-                }
-            };
+            // Text Positioning: Above tip if Up, Below tip if Down
+            const textY = isUp ? branchEndY - 5 : branchEndY + 14;
 
-            return (
-                <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-8 print-border-none">
-                    <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center gap-2 flex-wrap no-print">
-                        <span className="text-xs font-bold text-gray-400 mr-2 uppercase tracking-wide">Editor</span>
-                        <select onChange={(e) => exec('fontSize', e.target.value)} className="text-sm bg-white border border-gray-300 rounded px-2 py-1 cursor-pointer hover:border-blue-500">
-                            <option value="3">Normal</option>
-                            <option value="5">Large</option>
-                            <option value="7">Huge</option>
-                        </select>
-                        <div className="flex items-center gap-1 border-l border-gray-300 pl-3">
-                            <button onClick={() => exec('foreColor', '#000000')} className="w-6 h-6 rounded-full bg-black hover:ring-2 ring-offset-1 ring-gray-300"></button>
-                            <button onClick={() => exec('foreColor', '#ef4444')} className="w-6 h-6 rounded-full bg-red-500 hover:ring-2 ring-offset-1 ring-red-300"></button>
-                            <button onClick={() => exec('foreColor', '#0071e3')} className="w-6 h-6 rounded-full bg-blue-600 hover:ring-2 ring-offset-1 ring-blue-300"></button>
-                        </div>
-                        <div className="flex items-center gap-1 border-l border-gray-300 pl-3">
-                            <button onClick={() => exec('bold')} className="px-3 py-1 bg-white border border-gray-300 rounded text-sm font-bold hover:bg-gray-100">B</button>
-                            <button onClick={() => exec('italic')} className="px-3 py-1 bg-white border border-gray-300 rounded text-sm italic hover:bg-gray-100">I</button>
-                            <button onClick={() => exec('underline')} className="px-3 py-1 bg-white border border-gray-300 rounded text-sm underline hover:bg-gray-100">U</button>
-                        </div>
-                    </div>
-                    <div 
-                        ref={editorRef}
-                        contentEditable 
-                        className="editor-content p-6 focus:outline-none text-gray-700 print-expand"
-                        onPaste={handlePaste}
-                        onInput={handleInput}
-                    />
-                </div>
+            const statusConfig = STATUS_OPTIONS[factor.status];
+            const isConcluded = factor.status === 'CONCLUDED';
+            const isPrecluded = factor.status === 'PRECLUDED';
+            
+            const strokeColor = isConcluded ? statusConfig.boneColor : (isPrecluded ? '#cbd5e1' : '#94a3b8');
+            const strokeWidth = isConcluded ? 2.5 : 1.5;
+            const textColor = isConcluded ? '#dc2626' : (isPrecluded ? '#94a3b8' : '#64748b');
+            const textDec = isPrecluded ? 'line-through' : 'none';
+
+            elements.push(
+                <g key={`fact-${factor.id}`}>
+                    <circle cx={factorRootX} cy={factorRootY} r="2" fill="#cbd5e1" />
+                    
+                    {/* Tertiary Branch */}
+                    <path d={`M ${factorRootX} ${factorRootY} Q ${factorRootX} ${branchEndY} ${branchEndX} ${branchEndY}`}
+                          fill="none" stroke={strokeColor} strokeWidth={strokeWidth} />
+                    
+                    {/* Text Label */}
+                    <text x={branchEndX - 5} y={textY} fontSize="12" fill={textColor} 
+                          textDecoration={textDec} fontWeight={isConcluded ? 'bold' : 'normal'}
+                          textAnchor="start"
+                    >
+                        {factor.factor}
+                    </text>
+                </g>
             );
-        };
+        });
 
-        const App = () => {
-            const [problem, setProblem] = useState(() => {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                return saved ? JSON.parse(saved).problem : "Water Heater Issue";
-            });
-            
-            const [rows, setRows] = useState(() => {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                return saved ? JSON.parse(saved).rows : DEFAULT_DATA;
-            });
+        distFromSpine += 100; // Vertical spacing between secondary bones
+      });
 
-            const [notes, setNotes] = useState(() => {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                return saved ? (JSON.parse(saved).notes || "") : "";
-            });
-            
-            // Fix: Version key to force re-render of RichTextEditor on file load
-            const [editorVersion, setEditorVersion] = useState(0);
+      currentX -= CONFIG.categorySpacing;
+    });
 
-            const [lastSaved, setLastSaved] = useState(null);
-            const [isSaving, setIsSaving] = useState(false);
-            const fileInputRef = useRef(null);
+    return { elements, width: dynamicWidth };
+  };
 
-            // --- Fix: Debounced Auto-Save ---
-            useEffect(() => {
-                setIsSaving(true);
-                const handler = setTimeout(() => {
-                    const dataToSave = { problem, rows, notes, timestamp: new Date().getTime() };
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
-                    setLastSaved(new Date());
-                    setIsSaving(false);
-                }, 1000); // Wait 1 second after last change
+  const fishbone = renderFishbone();
 
-                return () => clearTimeout(handler);
-            }, [problem, rows, notes]);
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800 font-sans print:bg-white">
+      <header className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center sticky top-0 z-50 print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="bg-slate-900 text-white p-1.5 rounded-lg"><Maximize size={20} /></div>
+          <div><h1 className="font-bold text-lg leading-tight">Fishbone Pro</h1><p className="text-xs text-slate-500">RCA Edition</p></div>
+        </div>
+        <div className="flex gap-2">
+           <input type="file" ref={fileInputRef} onChange={handleLoad} accept=".json" className="hidden" />
+           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm font-medium hover:bg-slate-50 transition"><FolderOpen size={16} /> Open</button>
+           <button onClick={handleSave} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm font-medium hover:bg-slate-50 transition"><Save size={16} /> Save</button>
+           <div className="w-px h-8 bg-slate-200 mx-1"></div>
+           <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 shadow-sm transition"><Printer size={16} /> Print / PDF</button>
+        </div>
+      </header>
 
-            // --- File Handlers ---
-            const handleSaveFile = () => {
-                const data = { problem, rows, notes, version: 1 };
-                const json = JSON.stringify(data, null, 2);
-                const blob = new Blob([json], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `Fishbone_${problem.replace(/\s+/g, '_')}.json`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            };
+      <div className="flex-1 flex flex-col p-6 gap-6 max-w-[1600px] mx-auto w-full print:p-0">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative print:border-none print:shadow-none" style={{height: '550px'}}>
+             <div className="absolute top-4 left-4 z-10 bg-white/90 p-3 rounded-xl border border-slate-200 shadow-sm backdrop-blur print:hidden">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Problem Statement</label>
+                <textarea value={problem} onChange={(e) => setProblem(e.target.value)} className="bg-transparent font-bold text-lg text-slate-800 w-64 outline-none resize-none h-auto overflow-hidden" rows={2}/>
+             </div>
+             <div className="absolute bottom-4 right-4 z-10 flex gap-2 print:hidden">
+                <button onClick={() => {setScale(1); setPan({x:0,y:0})}} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm text-xs font-bold text-slate-600">Reset View</button>
+             </div>
+             <div className={`w-full h-full bg-slate-50 cursor-grab active:cursor-grabbing print:bg-white ${isDragging ? 'cursor-grabbing' : ''}`}
+                onWheel={(e) => { if(e.ctrlKey) { e.preventDefault(); setScale(s => Math.min(Math.max(0.3, s * (e.deltaY > 0 ? 0.9 : 1.1)), 3)); }}}
+                onMouseDown={(e) => { if(e.button===0) { setIsDragging(true); setDragStart({x: e.clientX-pan.x, y: e.clientY-pan.y}) }}}
+                onMouseMove={(e) => { if(isDragging) setPan({x: e.clientX-dragStart.x, y: e.clientY-dragStart.y}) }}
+                onMouseUp={() => setIsDragging(false)} onMouseLeave={() => setIsDragging(false)}>
+                <svg width="100%" height="100%" viewBox={`${-pan.x} ${-pan.y} ${fishbone.width} ${CONFIG.height}`} style={{transform: `scale(${scale})`, transformOrigin: '0 0', transition: isDragging ? 'none' : 'transform 0.1s ease-out'}}>
+                    <defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" strokeWidth="1"/></pattern></defs>
+                    <rect x={-5000} y={-5000} width="10000" height="10000" fill="url(#grid)" className="print:hidden" />
+                    {fishbone.elements}
+                </svg>
+             </div>
+        </div>
 
-            const handleLoadFile = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const data = JSON.parse(e.target.result);
-                        if (data.problem !== undefined) setProblem(data.problem);
-                        if (data.rows !== undefined) setRows(data.rows);
-                        if (data.notes !== undefined) setNotes(data.notes);
-                        
-                        // Fix: Clean way to update editor
-                        setEditorVersion(v => v + 1);
-                        
-                        alert("File loaded successfully!");
-                    } catch (err) {
-                        alert("Error loading file: Invalid format.");
-                    }
-                };
-                reader.readAsText(file);
-                event.target.value = '';
-            };
-
-            const triggerFileSelect = () => {
-                fileInputRef.current.click();
-            };
-
-            const handlePrint = () => {
-                setScale(1); // Fix: Reset to 1 for print, let CSS handle width
-                setPan({x:0, y:0});
-                setTimeout(() => window.print(), 100);
-            };
-
-            // ... Zoom & Fishbone calc ...
-            const svgRef = useRef(null);
-            const [scale, setScale] = useState(1);
-            const [pan, setPan] = useState({ x: 0, y: 0 });
-            const [isDragging, setIsDragging] = useState(false);
-            const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-
-            const handleRowChange = (id, field, value) => {
-                setRows(rows.map(row => row.id === id ? { ...row, [field]: value } : row));
-            };
-
-            const insertRowAfter = (index) => {
-                const currentRow = rows[index];
-                const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
-                const newRows = [...rows];
-                newRows.splice(index + 1, 0, {
-                    id: newId,
-                    category: currentRow ? currentRow.category : "New Category",
-                    cause: "New Cause",
-                    verify: "Verification",
-                    note: "", 
-                    status: 'PENDING'
-                });
-                setRows(newRows);
-            };
-
-            const addFirstRow = () => setRows([{ id: 1, category: "Category", cause: "Cause", verify: "Verification", note: "", status: 'PENDING' }]);
-            const deleteRow = (id) => setRows(rows.filter(row => row.id !== id));
-            
-            // Fix: Clear everything logic
-            const clearData = () => { 
-                if (window.confirm("Clear ALL data (including notes)?")) {
-                    setRows([]);
-                    setNotes("");
-                    setEditorVersion(v => v + 1); // Force clear editor
-                }
-            };
-
-            const handleWheel = (e) => {
-                if (e.ctrlKey) {
-                    e.preventDefault();
-                    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-                    setScale(Math.min(Math.max(0.3, scale * delta), 3));
-                }
-            };
-            const handleMouseDown = (e) => { if(e.button===0) { setIsDragging(true); setDragStart({x: e.clientX-pan.x, y: e.clientY-pan.y}); }};
-            const handleMouseMove = (e) => { if(isDragging) setPan({x: e.clientX-dragStart.x, y: e.clientY-dragStart.y}); };
-            const handleMouseUp = () => setIsDragging(false);
-            const resetView = () => { setScale(1); setPan({x:0, y:0}); };
-
-            const fishboneStructure = useMemo(() => {
-                const groups = {};
-                rows.forEach(row => {
-                    const cat = row.category || "Uncategorized";
-                    if (!groups[cat]) groups[cat] = [];
-                    groups[cat].push(row);
-                });
-                return Object.entries(groups).map(([name, items]) => ({ name, items }));
-            }, [rows]);
-
-            const CONFIG = { baseWidth: 1200, height: 800, spineY: 400, headX_Offset: 150, spineStart: 100, categorySpacing: 280, minBoneLength: 220, itemSpacing: 60 };
-
-            const renderFishbone = () => {
-                const dynamicHeadX = Math.max(CONFIG.baseWidth - CONFIG.headX_Offset, 200 + fishboneStructure.length * CONFIG.categorySpacing);
-                const dynamicWidth = dynamicHeadX + 300; 
-                const elements = [];
-                elements.push(<path key="tail" d={`M ${CONFIG.spineStart} ${CONFIG.spineY} L ${CONFIG.spineStart - 60} ${CONFIG.spineY - 50} Q ${CONFIG.spineStart - 40} ${CONFIG.spineY} ${CONFIG.spineStart - 60} ${CONFIG.spineY + 50} Z`} fill={COLORS.blue} opacity="0.8" className="drop-shadow-sm" />);
-                elements.push(<line key="spine" x1={CONFIG.spineStart} y1={CONFIG.spineY} x2={dynamicHeadX} y2={CONFIG.spineY} stroke={COLORS.bone} strokeWidth="6" strokeLinecap="round" />);
-                
-                // Fix: Use standard SVG text for better compatibility with Illustrator/Export
-                elements.push(
-                    <g key="head">
-                        <path d={`M ${dynamicHeadX} ${CONFIG.spineY - 90} L ${dynamicHeadX + 240} ${CONFIG.spineY} L ${dynamicHeadX} ${CONFIG.spineY + 90} Q ${dynamicHeadX - 40} ${CONFIG.spineY} ${dynamicHeadX} ${CONFIG.spineY - 90} Z`} fill={COLORS.blue} className="drop-shadow-xl" />
-                        <circle cx={dynamicHeadX + 160} cy={CONFIG.spineY - 20} r="10" fill="white" />
-                        <circle cx={dynamicHeadX + 160} cy={CONFIG.spineY - 20} r="4" fill="black" />
-                        
-                        {/* Standard SVG Text instead of foreignObject for better export support */}
-                        <text 
-                            x={dynamicHeadX + 100} 
-                            y={CONFIG.spineY} 
-                            fill="white" 
-                            fontSize="20" 
-                            fontWeight="bold" 
-                            textAnchor="middle" 
-                            dominantBaseline="middle"
-                            style={{fontFamily: 'system-ui, sans-serif'}}
-                        >
-                            {problem.length > 20 ? problem.substring(0, 18) + '...' : problem}
-                        </text>
-                    </g>
-                );
-
-                if (rows.length === 0) return { elements, width: dynamicWidth };
-
-                let currentX = dynamicHeadX - 260;
-                fishboneStructure.forEach((group, index) => {
-                    const isTop = index % 2 === 0;
-                    const itemCount = group.items.length;
-                    const requiredLength = (itemCount + 1) * CONFIG.itemSpacing;
-                    const boneLength = Math.max(CONFIG.minBoneLength, requiredLength);
-                    const startY = CONFIG.spineY;
-                    const endY = isTop ? startY - boneLength : startY + boneLength;
-                    const boneEndX = currentX - (boneLength * 0.4); 
-
-                    elements.push(
-                        <g key={`cat-${index}`}>
-                            <line x1={currentX} y1={startY} x2={boneEndX} y2={endY} stroke={COLORS.bone} strokeWidth="4" strokeLinecap="round" />
-                            <g transform={`translate(${boneEndX}, ${isTop ? endY - 40 : endY + 20})`}>
-                                <rect x="-70" y="-10" width="140" height="36" rx="18" fill="white" stroke="#d2d2d7" strokeWidth="1" className="drop-shadow-sm" />
-                                <text x="0" y="14" textAnchor="middle" fontWeight="600" fill={COLORS.black} fontSize="14" style={{fontFamily: 'system-ui'}}>{group.name}</text>
-                            </g>
-                        </g>
-                    );
-                    group.items.forEach((item, i) => {
-                        const distance = (i + 1) * CONFIG.itemSpacing;
-                        const t = distance / Math.sqrt(Math.pow(boneEndX - currentX, 2) + Math.pow(endY - startY, 2));
-                        const rootX = currentX + (boneEndX - currentX) * t;
-                        const rootY = startY + (endY - startY) * t;
-                        const causeLen = 160;
-                        const causeEndX = isTop ? rootX + causeLen : rootX + causeLen;
-                        const causeEndY = rootY;
-                        const verifyEndX = causeEndX + 20; 
-                        const verifyEndY = isTop ? causeEndY + 25 : causeEndY - 25;
-                        const statusColor = item.status === 'DONE' ? COLORS.green : (item.status === 'PENDING' ? COLORS.red : COLORS.gray);
-                        elements.push(
-                            <g key={`item-${item.id}`}>
-                                <line x1={rootX} y1={rootY} x2={causeEndX} y2={causeEndY} stroke="#86868b" strokeWidth="2" strokeLinecap="round" />
-                                <text x={causeEndX + 8} y={causeEndY + 5} fontSize="14" fontWeight="500" fill={COLORS.black} textAnchor="start" style={{fontFamily: 'system-ui'}}>{item.cause}</text>
-                                <path d={`M ${causeEndX - 20} ${causeEndY} Q ${causeEndX} ${causeEndY} ${verifyEndX} ${verifyEndY}`} fill="none" stroke={statusColor} strokeWidth="1.5" />
-                                <circle cx={verifyEndX} cy={verifyEndY} r="4" fill={statusColor} stroke="white" strokeWidth="2" />
-                                <text x={verifyEndX + 10} y={verifyEndY + 4} fontSize="12" fill={statusColor} fontWeight="500" style={{fontFamily: 'system-ui'}}>{item.verify}</text>
-                            </g>
-                        );
-                    });
-                    currentX -= CONFIG.categorySpacing;
-                });
-                return { elements, width: dynamicWidth };
-            };
-            const fishbone = renderFishbone();
-
-            return (
-                <div className="min-h-screen bg-[#f5f5f7] flex flex-col print-bg-white">
-                    {/* Header */}
-                    <div className="bg-white/80 backdrop-blur-md border-b border-gray-200 h-16 flex items-center justify-between px-6 sticky top-0 z-40 no-print">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center text-white font-bold">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                            </div>
-                            <h1 className="text-lg font-semibold tracking-tight">Fishbone Pro</h1>
-                            <span className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ml-2 transition-colors ${isSaving ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
-                                {isSaving ? 'Saving...' : 'Cloud Saved'}
-                            </span>
-                        </div>
-                        <div className="flex gap-2">
-                            <input type="file" ref={fileInputRef} onChange={handleLoadFile} accept=".json" className="hidden" />
-                            <button onClick={triggerFileSelect} className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-full hover:bg-gray-50 border border-gray-200 transition active:scale-95">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                Open File
-                            </button>
-                            <button onClick={handleSaveFile} className="flex items-center gap-2 px-4 py-2 bg-white text-gray-700 text-sm font-medium rounded-full hover:bg-gray-50 border border-gray-200 transition active:scale-95">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                                Save to Disk
-                            </button>
-                            <button onClick={handlePrint} className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-full hover:bg-blue-700 transition shadow-lg hover:shadow-xl active:scale-95">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
-                                PDF / Print
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 flex flex-col p-6 gap-6 max-w-[1600px] mx-auto w-full print-expand">
-                        {/* 1. Canvas Section */}
-                        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden relative print-border-none print-expand" style={{height: '600px'}}>
-                             <div className="absolute top-6 left-6 z-20 glass rounded-2xl p-4 shadow-sm w-64 no-print">
-                                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Project Issue</label>
-                                <input type="text" value={problem} onChange={(e) => setProblem(e.target.value)} className="text-2xl font-bold bg-transparent outline-none text-gray-900 placeholder-gray-300 w-full" placeholder="Problem Statement..." />
-                             </div>
-                             
-                             <div className="hidden print:block absolute top-4 left-4 z-50">
-                                <h1 className="text-3xl font-bold text-gray-900">{problem}</h1>
-                                <p className="text-sm text-gray-500">Fishbone Diagram Analysis</p>
-                             </div>
-
-                             <div className="absolute bottom-6 right-6 z-20 flex gap-2 no-print">
-                                <button onClick={resetView} className="glass px-4 py-2 rounded-full text-sm font-bold text-gray-600 hover:bg-gray-50 shadow-sm">Reset View ({Math.round(scale * 100)}%)</button>
-                             </div>
-                             <div className="absolute top-6 right-6 z-20 text-xs text-gray-400 bg-white/80 px-2 py-1 rounded backdrop-blur no-print">Tip: Ctrl + Scroll to Zoom, Drag to Pan</div>
-
-                             <div className={`w-full h-full cursor-grab ${isDragging ? 'cursor-grabbing' : ''} bg-[#f8f9fa] print-bg-white`} onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
-                                <svg ref={svgRef} width="100%" height="100%" viewBox={`${-pan.x} ${-pan.y} ${fishbone.width || CONFIG.baseWidth} ${CONFIG.height}`} style={{ transform: `scale(${scale})`, transformOrigin: '0 0', transition: isDragging ? 'none' : 'transform 0.1s ease-out' }}>
-                                    <defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e5e7eb" strokeWidth="1"/></pattern></defs>
-                                    <rect x={-2000} y={-2000} width="8000" height="8000" fill="url(#grid)" className="print:hidden" />
-                                    {fishbone.elements}
-                                </svg>
-                             </div>
-                        </div>
-
-                        {/* 2. Table Section */}
-                        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-8 page-break-inside-avoid print-border-none print-expand">
-                            <div className="flex justify-between items-center mb-6">
-                                <div className="flex items-center gap-4">
-                                    <h2 className="text-xl font-bold text-gray-900">Analysis Details</h2>
-                                    {rows.length > 0 && <button onClick={clearData} className="px-3 py-1 bg-gray-100 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-full text-xs font-bold transition no-print">Clear List</button>}
-                                </div>
-                                {rows.length === 0 && <button onClick={addFirstRow} className="text-blue-600 text-sm font-medium hover:underline flex items-center gap-1 no-print">+ Add First Row</button>}
-                            </div>
-
-                            <div className="overflow-auto pb-4 print-expand">
-                                <table className="w-full text-left border-collapse min-w-[900px]">
-                                    <thead className="text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100">
-                                        <tr>
-                                            <th className="py-3 px-2 w-[15%]">Category</th>
-                                            <th className="py-3 px-2 w-[20%]">Cause</th>
-                                            <th className="py-3 px-2 w-[25%]">Verify / Action</th>
-                                            <th className="py-3 px-2 w-[15%] text-gray-400">Note</th>
-                                            <th className="py-3 px-2 w-[15%]">Status</th>
-                                            <th className="py-3 px-2 w-[10%] text-right no-print">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {rows.map((row, index) => (
-                                            <tr key={row.id} className="group relative hover:bg-gray-50/50 transition-colors page-break-inside-avoid">
-                                                <td className="py-2 px-2 align-top"><input type="text" className="apple-input w-full px-3 py-2 text-sm font-bold text-gray-800" value={row.category} onChange={(e) => handleRowChange(row.id, 'category', e.target.value)} placeholder="Category" /></td>
-                                                <td className="py-2 px-2 align-top"><input type="text" className="apple-input w-full px-3 py-2 text-sm text-gray-700" value={row.cause} onChange={(e) => handleRowChange(row.id, 'cause', e.target.value)} placeholder="Cause" /></td>
-                                                <td className="py-2 px-2 align-top"><input type="text" className="apple-input w-full px-3 py-2 text-sm text-gray-500" value={row.verify} onChange={(e) => handleRowChange(row.id, 'verify', e.target.value)} placeholder="How to verify" /></td>
-                                                <td className="py-2 px-2 align-top"><input type="text" className="apple-input w-full px-3 py-2 text-sm text-gray-500 italic bg-gray-50/50 print-bg-white" value={row.note} onChange={(e) => handleRowChange(row.id, 'note', e.target.value)} placeholder="Memo..." /></td>
-                                                <td className="py-2 px-2 align-top">
-                                                    <select value={row.status} onChange={(e) => handleRowChange(row.id, 'status', e.target.value)} className={`w-full text-xs font-bold rounded-full pl-3 pr-2 py-1.5 border-0 outline-none cursor-pointer appearance-none ${STATUS_OPTIONS[row.status].bg}`}>
-                                                        {Object.values(STATUS_OPTIONS).map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
-                                                    </select>
-                                                </td>
-                                                <td className="py-2 px-2 text-right align-top no-print">
-                                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button onClick={() => insertRowAfter(index)} className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition" title="Insert below"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-                                                        <button onClick={() => deleteRow(row.id)} className="w-8 h-8 flex items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100 transition" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        {/* 3. Notes Section */}
-                        <div className="pb-10 page-break-inside-avoid">
-                            <h2 className="text-xl font-bold text-gray-900 mb-4 px-2">Project Notes & Screenshots</h2>
-                            <p className="text-sm text-gray-500 mb-2 px-2 no-print">You can paste screenshots directly here using Ctrl+V.</p>
-                            <RichTextEditor key={editorVersion} value={notes} onChange={setNotes} />
-                        </div>
-                    </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 print:border-none print:shadow-none print:p-0">
+            <div className="flex justify-between items-center mb-4 print:hidden">
+                <h2 className="text-lg font-bold flex items-center gap-2"><FileText size={20} className="text-blue-600"/>Hypothesis Verification</h2>
+                <div className="flex gap-2">
+                    {rows.length === 0 && <button onClick={addFirstRow} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-md text-sm font-medium hover:bg-blue-100 flex items-center gap-1"><Plus size={16}/> Add First Row</button>}
+                    <button onClick={clearData} className="px-3 py-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md text-sm transition flex items-center gap-1"><Trash2 size={16}/> Clear List</button>
                 </div>
-            );
-        };
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse min-w-[1000px]">
+                    <thead>
+                        <tr className="border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider">
+                            <th className="py-3 px-2 w-[12%]">Primary Bone (Category)</th>
+                            <th className="py-3 px-2 w-[18%]">Secondary Bone (Cause)</th>
+                            <th className="py-3 px-2 w-[18%] text-blue-700">Specific Factor (Hypothesis)</th>
+                            <th className="py-3 px-2 w-[20%]">Verification Method</th>
+                            <th className="py-3 px-2 w-[15%]">Evidence / Result</th>
+                            <th className="py-3 px-2 w-[12%]">Conclusion</th>
+                            <th className="py-3 px-2 w-[5%] text-right print:hidden"></th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {rows.map((row, index) => (
+                            <tr key={row.id} className="group hover:bg-slate-50 transition-colors">
+                                <td className="p-2 align-top"><input type="text" value={row.category} onChange={e => handleRowChange(row.id, 'category', e.target.value)} className="w-full bg-transparent font-bold text-slate-700 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Category" /></td>
+                                <td className="p-2 align-top"><input type="text" value={row.cause} onChange={e => handleRowChange(row.id, 'cause', e.target.value)} className="w-full bg-transparent text-slate-700 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Cause" /></td>
+                                <td className="p-2 align-top bg-blue-50/30 rounded"><input type="text" value={row.factor} onChange={e => handleRowChange(row.id, 'factor', e.target.value)} className="w-full bg-transparent font-medium text-blue-900 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Hypothesis" /></td>
+                                <td className="p-2 align-top"><textarea value={row.method} onChange={e => handleRowChange(row.id, 'method', e.target.value)} className="w-full bg-transparent text-slate-600 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1 resize-none h-10" placeholder="Method" /></td>
+                                <td className="p-2 align-top"><textarea value={row.evidence} onChange={e => handleRowChange(row.id, 'evidence', e.target.value)} className="w-full bg-transparent text-slate-600 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1 resize-none h-10" placeholder="Result" /></td>
+                                <td className="p-2 align-top">
+                                    <select value={row.status} onChange={e => handleRowChange(row.id, 'status', e.target.value as any)} className={`w-full text-xs font-bold rounded-md px-2 py-1.5 border-none outline-none cursor-pointer appearance-none ${STATUS_OPTIONS[row.status].bg}`}>
+                                        {Object.values(STATUS_OPTIONS).map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+                                    </select>
+                                </td>
+                                <td className="p-2 text-right print:hidden">
+                                    <div className="flex justify-end gap-1">
+                                        <button onClick={() => insertRowAfter(index)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Insert Below"><Plus size={16}/></button>
+                                        <button onClick={() => deleteRow(row.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded" title="Delete"><Trash2 size={16}/></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <RichTextEditor value={notes} onChange={setNotes} />
+        </div>
+      </div>
+    </div>
+  );
+};
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+export default App;
