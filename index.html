@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fishbone Pro - Layout Update</title>
+    <title>Fishbone Pro - Visual Update</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -27,7 +27,6 @@
             .print\:border-none { border: none !important; }
             .print\:bg-white { background-color: white !important; }
         }
-        /* Slider Styling */
         input[type=range] {
             -webkit-appearance: none;
             background: transparent;
@@ -66,25 +65,27 @@
         const Maximize = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>;
         const FileText = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
         const Type = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>;
+        const Star = ({size=16, filled=false}) => <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? "#ea580c" : "none"} stroke={filled ? "#ea580c" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 
         // --- Config ---
         const STATUS_OPTIONS = {
-            UNVERIFIED: { id: 'UNVERIFIED', label: '❓ Unverified', color: '#64748b', boneColor: '#94a3b8', bg: 'bg-slate-100 text-slate-600' },
-            PRECLUDED: { id: 'PRECLUDED', label: '❌ Precluded', color: '#cbd5e1', boneColor: '#e2e8f0', bg: 'bg-gray-100 text-gray-400 line-through' },
-            CONCLUDED: { id: 'CONCLUDED', label: '✅ Concluded', color: '#dc2626', boneColor: '#ef4444', bg: 'bg-red-50 text-red-700 font-bold border-red-200' }
+            CANT_EXECUTE: { id: 'CANT_EXECUTE', label: '⛔ Can\'t Execute', icon: '⛔', color: '#94a3b8', boneColor: '#94a3b8', bg: 'bg-gray-100 text-gray-500' },
+            ON_GOING: { id: 'ON_GOING', label: '⏳ On Going', icon: '⏳', color: '#3b82f6', boneColor: '#60a5fa', bg: 'bg-blue-50 text-blue-700' },
+            FINISHED: { id: 'FINISHED', label: '✅ Finished', icon: '✅', color: '#16a34a', boneColor: '#22c55e', bg: 'bg-green-50 text-green-700' },
+            // EXCLUDE: boneColor changed to standard gray (#94a3b8) to keep bone visible
+            EXCLUDE: { id: 'EXCLUDE', label: '❌ Exclude', icon: '❌', color: '#cbd5e1', boneColor: '#94a3b8', bg: 'bg-gray-50 text-gray-400 line-through' }
         };
 
         const DEMO_DATA = [
-            { id: 1, category: "能源/電力", cause: "點火系統供電", factor: "電池沒電 (更換測試)", method: "更換全新電池", evidence: "成功點燃", status: 'CONCLUDED' },
-            { id: 2, category: "能源/電力", cause: "點火系統供電", factor: "電池盒彈簧嚴重鏽蝕", method: "目視檢查", evidence: "正常", status: 'PRECLUDED' },
-            { id: 21, category: "能源/電力", cause: "點火系統供電", factor: "電池接點接觸不良", method: "清潔接點", evidence: "無效", status: 'PRECLUDED' },
-            { id: 3, category: "能源/電力", cause: "瓦斯供應異常", factor: "瓦斯桶沒氣", method: "搖晃確認", evidence: "有氣", status: 'PRECLUDED' },
-            { id: 4, category: "設備硬體", cause: "點火針故障", factor: "點火針積碳", method: "清潔測試", evidence: "無效", status: 'PRECLUDED' },
-            { id: 5, category: "設備硬體", cause: "水盤異常", factor: "皮膜破裂", method: "拆機", evidence: "待確認", status: 'UNVERIFIED' },
-            { id: 6, category: "人為操作", cause: "模式設定錯誤", factor: "誤切到夏天模式", method: "檢查面板", evidence: "正常", status: 'PRECLUDED' },
+            { id: 1, category: "能源/電力", cause: "點火系統供電", factor: "電池沒電 (更換測試)", method: "更換全新電池", evidence: "成功點燃", status: 'FINISHED', isPriority: true },
+            { id: 2, category: "能源/電力", cause: "點火系統供電", factor: "電池盒彈簧嚴重鏽蝕", method: "目視檢查", evidence: "正常", status: 'EXCLUDE', isPriority: false },
+            { id: 21, category: "能源/電力", cause: "點火系統供電", factor: "電池接點接觸不良", method: "清潔接點", evidence: "無效", status: 'EXCLUDE', isPriority: false },
+            { id: 3, category: "能源/電力", cause: "瓦斯供應異常", factor: "瓦斯桶沒氣", method: "搖晃確認", evidence: "有氣", status: 'EXCLUDE', isPriority: false },
+            { id: 4, category: "設備硬體", cause: "點火針故障", factor: "點火針積碳", method: "清潔測試", evidence: "無效", status: 'CANT_EXECUTE', isPriority: false },
+            { id: 5, category: "設備硬體", cause: "水盤異常", factor: "皮膜破裂", method: "拆機", evidence: "待確認", status: 'ON_GOING', isPriority: true },
+            { id: 6, category: "人為操作", cause: "模式設定錯誤", factor: "誤切到夏天模式", method: "檢查面板", evidence: "正常", status: 'EXCLUDE', isPriority: false },
         ];
 
-        // --- Helper: Estimate Text Width ---
         const getTextWidth = (text, fontSize = 12) => {
             const canvas = getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
             const context = canvas.getContext("2d");
@@ -93,7 +94,6 @@
             return metrics.width + 10;
         };
 
-        // --- Rich Text Editor ---
         const RichTextEditor = ({ value, onChange }) => {
             const editorRef = useRef(null);
             useEffect(() => {
@@ -140,10 +140,11 @@
 
         const App = () => {
             const [problem, setProblem] = useState("熱水器不熱");
+            const [problemDesc, setProblemDesc] = useState("熱水器完全沒有反應，有更換過電池");
             const [rows, setRows] = useState(DEMO_DATA);
             const [notes, setNotes] = useState("<div>Notes...</div>");
             const [scale, setScale] = useState(1);
-            const [baseFontSize, setBaseFontSize] = useState(14); // Slider controls this
+            const [baseFontSize, setBaseFontSize] = useState(14); 
             const [pan, setPan] = useState({ x: 0, y: 0 });
             const [isDragging, setIsDragging] = useState(false);
             const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -155,15 +156,15 @@
                 const currentRow = rows[index];
                 const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
                 const newRows = [...rows];
-                newRows.splice(index + 1, 0, { ...currentRow, id: newId, factor: "New Factor", method: "", evidence: "", status: 'UNVERIFIED' });
+                newRows.splice(index + 1, 0, { ...currentRow, id: newId, factor: "New Factor", method: "", evidence: "", status: 'ON_GOING', isPriority: false });
                 setRows(newRows);
             };
             const deleteRow = (id) => setRows(rows.filter(r => r.id !== id));
-            const addFirstRow = () => setRows([{ id: 1, category: "Primary", cause: "Secondary", factor: "Factor", method: "", evidence: "", status: 'UNVERIFIED' }]);
+            const addFirstRow = () => setRows([{ id: 1, category: "Primary", cause: "Secondary", factor: "Factor", method: "", evidence: "", status: 'ON_GOING', isPriority: false }]);
             const clearData = () => { if(confirm("Clear all data?")) { setRows([]); setNotes(""); }};
 
             const handleSave = () => {
-                const blob = new Blob([JSON.stringify({ problem, rows, notes, version: "3.5-LayoutUpdate" }, null, 2)], { type: "application/json" });
+                const blob = new Blob([JSON.stringify({ problem, problemDesc, rows, notes, version: "3.7-VisualTweaks" }, null, 2)], { type: "application/json" });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.href = url;
@@ -178,6 +179,7 @@
                     try {
                         const data = JSON.parse(ev.target?.result);
                         if(data.problem) setProblem(data.problem);
+                        if(data.problemDesc) setProblemDesc(data.problemDesc);
                         if(data.rows) setRows(data.rows);
                         if(data.notes) setNotes(data.notes);
                     } catch (err) { alert("Invalid file"); }
@@ -211,7 +213,6 @@
                 });
             }, [rows]);
 
-            // --- Optimized Layout Config ---
             const layoutConfig = useMemo(() => {
                 const fontGrowth = Math.max(0, baseFontSize - 14);
                 const s = 1 + (fontGrowth * 0.01); 
@@ -230,20 +231,22 @@
                 };
             }, [baseFontSize]);
 
-            // Calculate Geometry and Elements
             const { elements: fishboneElements, totalWidth } = useMemo(() => {
                 const { s, fontSize, smallFontSize, categorySpacing, spineY, verticalBranchGap, problemFontSize, headScale } = layoutConfig;
 
-                // 1. Calculate Layout Geometries
                 const categoriesWithLayout = fishboneStructure.map(cat => {
                     const causesWithLayout = cat.causes.map(cause => {
                         let currentPos = 40 * s;
                         const factorsWithPos = cause.factors.map((f, i) => {
-                            const width = getTextWidth(f.factor, smallFontSize);
+                            const statusConfig = STATUS_OPTIONS[f.status] || STATUS_OPTIONS.ON_GOING;
+                            const prefix = statusConfig.icon + " ";
+                            const fullText = prefix + f.factor + (f.isPriority ? " ⭐" : "");
+                            
+                            const width = getTextWidth(fullText, smallFontSize);
                             const step = width * 0.7 + (15 * s); 
                             const pos = currentPos;
                             currentPos += step; 
-                            return { ...f, xOffset: pos, width };
+                            return { ...f, xOffset: pos, width, statusIcon: statusConfig.icon };
                         });
                         const totalLen = currentPos + (40 * s); 
                         const causeTextW = getTextWidth(cause.name, fontSize);
@@ -253,7 +256,6 @@
                     return { ...cat, causes: causesWithLayout };
                 });
 
-                // 2. Determine Head Position
                 let maxCauseLenInFirstCat = 0;
                 if (categoriesWithLayout.length > 0) {
                     categoriesWithLayout[0].causes.forEach(c => {
@@ -266,7 +268,6 @@
                     200 + categoriesWithLayout.length * categorySpacing
                 );
 
-                // 3. Auto-Shift Logic
                 const leftmostBoneRawX = rawDynamicHeadX - headGap - ((categoriesWithLayout.length - 1) * categorySpacing);
                 const safeLeftMargin = 200;
                 let shiftRight = 0;
@@ -279,12 +280,10 @@
                 const lastBoneX = firstBoneX - ((categoriesWithLayout.length - 1) * categorySpacing);
                 const finalSpineStart = lastBoneX - 100; 
 
-                // Head Dimensions
                 const headW = 240 * headScale;
                 const headH = 90 * headScale;
                 const requiredWidth = dynamicHeadX + headW + 150; 
 
-                // 4. Render
                 const elements = [];
 
                 elements.push(<path key="tail" d={`M ${finalSpineStart} ${spineY} L ${finalSpineStart - 60} ${spineY - 50} Q ${finalSpineStart - 40} ${spineY} ${finalSpineStart - 60} ${spineY + 50} Z`} fill="#3b82f6" opacity="0.8" />);
@@ -348,24 +347,29 @@
                             const branchLen = 30 * s; 
                             const branchEndY = factorRootY + (isUpFactor ? -branchLen : branchLen);
                             const branchEndX = factorRootX + (15 * s); 
-                            const statusConfig = STATUS_OPTIONS[factor.status];
-                            const isConcluded = factor.status === 'CONCLUDED';
-                            const isPrecluded = factor.status === 'PRECLUDED';
-                            const strokeColor = isConcluded ? statusConfig.boneColor : (isPrecluded ? '#cbd5e1' : '#94a3b8');
-                            const strokeWidth = isConcluded ? 2.5 : 1.5;
-                            const textColor = isConcluded ? '#dc2626' : (isPrecluded ? '#94a3b8' : '#64748b');
-                            const textDec = isPrecluded ? 'line-through' : 'none';
+                            const statusConfig = STATUS_OPTIONS[factor.status] || STATUS_OPTIONS.ON_GOING;
+                            
+                            const isExclude = factor.status === 'EXCLUDE';
+                            const isPriority = factor.isPriority === true;
+
+                            // Updated Colors for Better Contrast
+                            // Bone: isPriority ? Orange : (Always Status Color / Standard Gray for Exclude)
+                            const strokeColor = isPriority ? '#ea580c' : statusConfig.boneColor;
+                            const strokeWidth = isPriority ? 2.5 : 1.5;
+                            
+                            // Text: isPriority ? Orange : (isExclude ? Faint Gray : Standard Darker Black)
+                            // This creates stronger contrast between Exclude and Normal
+                            const textColor = isPriority ? '#c2410c' : (isExclude ? '#cbd5e1' : '#1e293b');
+                            const fontWeight = isPriority ? 'bold' : 'normal';
+                            
                             const textY = isUpFactor ? branchEndY - 5 : branchEndY + 14;
 
                             elements.push(
                                 <g key={`fact-${factor.id}`}>
                                     <circle cx={factorRootX} cy={factorRootY} r={2*s} fill="#cbd5e1" />
                                     <line x1={factorRootX} y1={factorRootY} x2={branchEndX} y2={branchEndY} stroke={strokeColor} strokeWidth={strokeWidth} />
-                                    <text x={branchEndX - 5} y={textY} fontSize={smallFontSize} fill={textColor} 
-                                        textDecoration={textDec} fontWeight={isConcluded ? 'bold' : 'normal'}
-                                        textAnchor="start"
-                                    >
-                                        {factor.factor}
+                                    <text x={branchEndX - 5} y={textY} fontSize={smallFontSize} fill={textColor} fontWeight={fontWeight} textDecoration={isExclude ? 'line-through' : 'none'} textAnchor="start">
+                                        {statusConfig.icon} {factor.factor} {isPriority ? "⭐" : ""}
                                     </text>
                                 </g>
                             );
@@ -401,8 +405,6 @@
                             <div><h1 className="font-bold text-lg leading-tight">Fishbone Pro</h1><p className="text-xs text-slate-500">RCA Edition</p></div>
                         </div>
                         
-                        {/* Font Slider removed from Header */}
-
                         <div className="flex gap-2">
                             <input type="file" ref={fileInputRef} onChange={handleLoad} accept=".json" className="hidden" />
                             <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm font-medium hover:bg-slate-50 transition"><FolderOpen size={16} /> Open</button>
@@ -414,21 +416,31 @@
 
                     <div className="flex-1 flex flex-col p-6 gap-6 max-w-[1600px] mx-auto w-full print:p-0">
                         
-                        {/* 1. New Problem Statement Bar (Independent from Canvas) */}
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col justify-center print:hidden">
-                            <label className="text-xs font-bold text-slate-400 uppercase mb-1">Problem Statement</label>
-                            <input 
-                                type="text" 
-                                value={problem} 
-                                onChange={(e) => setProblem(e.target.value)} 
-                                className="w-full bg-transparent font-bold text-slate-800 text-xl outline-none border-b-2 border-transparent focus:border-blue-500 transition-colors placeholder-slate-300"
-                                placeholder="Enter the main problem here..."
-                            />
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col justify-center gap-3 print:hidden">
+                            <div className="w-full">
+                                <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Problem Title (Main Effect)</label>
+                                <input 
+                                    type="text" 
+                                    value={problem} 
+                                    onChange={(e) => setProblem(e.target.value)} 
+                                    className="w-full bg-transparent font-bold text-slate-800 text-2xl outline-none border-b border-transparent focus:border-blue-500 transition-colors placeholder-slate-300"
+                                    placeholder="Enter the main problem here..."
+                                />
+                            </div>
+                            <div className="w-full">
+                                <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Description / Context</label>
+                                <textarea 
+                                    value={problemDesc}
+                                    onChange={(e) => setProblemDesc(e.target.value)}
+                                    className="w-full bg-slate-50 rounded-lg p-2 text-sm text-slate-600 outline-none border border-slate-200 focus:border-blue-400 transition-colors resize-none"
+                                    rows={2}
+                                    placeholder="Detailed description of the problem, e.g., when, where, who, scale..."
+                                />
+                            </div>
                         </div>
 
                         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative print:border-none print:shadow-none" style={{height: '550px'}}>
                             
-                            {/* 2. Slider Moved to Canvas (Floating Panel) */}
                             <div className="absolute top-4 left-4 z-10 bg-white/90 p-2 rounded-lg border border-slate-200 shadow-sm backdrop-blur flex items-center gap-3 print:hidden">
                                 <Type size={16} className="text-slate-500"/>
                                 <div className="flex flex-col">
@@ -478,25 +490,31 @@
                                 <table className="w-full text-left text-sm border-collapse min-w-[1000px]">
                                     <thead>
                                         <tr className="border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider">
+                                            <th className="py-3 px-2 w-[5%] text-center">Priority</th>
                                             <th className="py-3 px-2 w-[12%]">Primary Bone (Category)</th>
                                             <th className="py-3 px-2 w-[18%]">Secondary Bone (Cause)</th>
                                             <th className="py-3 px-2 w-[18%] text-blue-700">Specific Factor (Hypothesis)</th>
-                                            <th className="py-3 px-2 w-[20%]">Verification Method</th>
+                                            <th className="py-3 px-2 w-[15%]">Verification Method</th>
                                             <th className="py-3 px-2 w-[15%]">Evidence / Result</th>
-                                            <th className="py-3 px-2 w-[12%]">Conclusion</th>
+                                            <th className="py-3 px-2 w-[12%]">Status</th>
                                             <th className="py-3 px-2 w-[5%] text-right print:hidden"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {rows.map((row, index) => (
                                             <tr key={row.id} className="group hover:bg-slate-50 transition-colors">
+                                                <td className="p-2 align-top text-center">
+                                                    <button onClick={() => handleRowChange(row.id, 'isPriority', !row.isPriority)} className="p-1.5 hover:bg-orange-50 rounded-full transition">
+                                                        <Star size={18} filled={row.isPriority} />
+                                                    </button>
+                                                </td>
                                                 <td className="p-2 align-top"><input type="text" value={row.category} onChange={e => handleRowChange(row.id, 'category', e.target.value)} className="w-full bg-transparent font-bold text-slate-700 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Category" /></td>
                                                 <td className="p-2 align-top"><input type="text" value={row.cause} onChange={e => handleRowChange(row.id, 'cause', e.target.value)} className="w-full bg-transparent text-slate-700 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Cause" /></td>
                                                 <td className="p-2 align-top bg-blue-50/30 rounded"><input type="text" value={row.factor} onChange={e => handleRowChange(row.id, 'factor', e.target.value)} className="w-full bg-transparent font-medium text-blue-900 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Hypothesis" /></td>
                                                 <td className="p-2 align-top"><textarea value={row.method} onChange={e => handleRowChange(row.id, 'method', e.target.value)} className="w-full bg-transparent text-slate-600 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1 resize-none h-10" placeholder="Method" /></td>
                                                 <td className="p-2 align-top"><textarea value={row.evidence} onChange={e => handleRowChange(row.id, 'evidence', e.target.value)} className="w-full bg-transparent text-slate-600 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1 resize-none h-10" placeholder="Result" /></td>
                                                 <td className="p-2 align-top">
-                                                    <select value={row.status} onChange={e => handleRowChange(row.id, 'status', e.target.value)} className={`w-full text-xs font-bold rounded-md px-2 py-1.5 border-none outline-none cursor-pointer appearance-none ${STATUS_OPTIONS[row.status].bg}`}>
+                                                    <select value={row.status} onChange={e => handleRowChange(row.id, 'status', e.target.value)} className={`w-full text-xs font-bold rounded-md px-2 py-1.5 border-none outline-none cursor-pointer appearance-none ${STATUS_OPTIONS[row.status]?.bg || 'bg-gray-100'}`}>
                                                         {Object.values(STATUS_OPTIONS).map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
                                                     </select>
                                                 </td>
