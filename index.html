@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fishbone Pro - Beautiful Head</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
+
+    <!-- Quill (Rich Text Editor) -->
+    <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+
     <style>
-        body { 
+        body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #f5f5f7;
             color: #1d1d1f;
@@ -19,6 +24,7 @@
         }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         @media print {
             body { background-color: white; }
             .print\:hidden { display: none !important; }
@@ -27,6 +33,7 @@
             .print\:border-none { border: none !important; }
             .print\:bg-white { background-color: white !important; }
         }
+
         input[type=range] {
             -webkit-appearance: none;
             background: transparent;
@@ -48,6 +55,7 @@
             background: #cbd5e1;
             border-radius: 2px;
         }
+
         /* Editor Styles */
         .editor-content img {
             cursor: pointer;
@@ -60,13 +68,94 @@
             outline: 3px solid #3b82f6;
             box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
         }
+
+        /* Quill polish to match our UI */
+        .ql-toolbar.ql-snow {
+            border: none;
+            padding: 0;
+        }
+        .ql-container.ql-snow {
+            border: none;
+        }
+        .ql-editor {
+            padding: 24px;
+            min-height: 150px;
+            color: #334155;
+        }
+        .ql-editor.ql-blank::before {
+            color: #94a3b8;
+            font-style: normal;
+        }
+        .ql-toolbar button,
+        .ql-toolbar .ql-picker-label {
+            border-radius: 10px;
+        }
+        .ql-toolbar button:hover,
+        .ql-toolbar .ql-picker-label:hover {
+            background: rgba(255,255,255,0.9);
+        }
+        .ql-toolbar button.ql-active,
+        .ql-toolbar .ql-picker-label.ql-active {
+            background: rgba(59,130,246,0.12);
+        }
+
+        /* Small error banner (helps debug when console is hidden) */
+        #error-banner {
+            display: none;
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            z-index: 999999;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(254, 226, 226, 0.95);
+            border: 1px solid #fecaca;
+            color: #7f1d1d;
+            font-size: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            backdrop-filter: blur(6px);
+        }
+        #error-banner .title { font-weight: 800; margin-right: 8px; }
+        #error-banner .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        #error-banner button { margin-left: 10px; font-weight: 700; color: #7f1d1d; }
     </style>
 </head>
 <body>
+    <div id="error-banner">
+        <span class="title">Runtime Error</span>
+        <span id="error-banner-text" class="mono"></span>
+        <button onclick="document.getElementById('error-banner').style.display='none'">Dismiss</button>
+    </div>
+
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useMemo, useRef, useEffect } = React;
+        const { useState, useMemo, useRef, useEffect, useCallback } = React;
+
+        // -----------------------------
+        // Global error hooks (better than silent "Script error")
+        // -----------------------------
+        (function attachGlobalErrorBanner() {
+            const show = (msg) => {
+                const banner = document.getElementById('error-banner');
+                const text = document.getElementById('error-banner-text');
+                if (!banner || !text) return;
+                text.textContent = String(msg || 'Unknown error');
+                banner.style.display = 'block';
+            };
+
+            window.addEventListener('error', (e) => {
+                // In some cross-origin cases, browsers only expose "Script error.".
+                const parts = [e.message || 'Script error.'];
+                if (e.filename) parts.push(`@ ${e.filename}:${e.lineno || 0}:${e.colno || 0}`);
+                show(parts.join(' '));
+            });
+
+            window.addEventListener('unhandledrejection', (e) => {
+                show(e?.reason?.message || e?.reason || 'Unhandled promise rejection');
+            });
+        })();
 
         // --- Icons ---
         const Plus = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
@@ -79,8 +168,8 @@
         const Type = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>;
         const Star = ({size=16, filled=false}) => <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? "#ea580c" : "none"} stroke={filled ? "#ea580c" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
         const Check = ({size=16}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
-        
-        // Editor Icons
+
+        // Editor Icons (kept; not used directly with Quill toolbar)
         const BoldIcon = () => <span className="font-bold font-serif">B</span>;
         const ItalicIcon = () => <span className="italic font-serif">I</span>;
         const UnderlineIcon = () => <span className="underline font-serif">U</span>;
@@ -93,6 +182,12 @@
         const UndoIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>;
         const RedoIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>;
         const ImageIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
+        const HighlighterIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l6 6"/><path d="M14 3l7 7-4 4-7-7z"/><path d="M3 21l6-2 2-6-6-6-2 6z"/></svg>;
+        const LinkIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 1 0-7l1.2-1.2a5 5 0 0 1 7 7L17 13"/><path d="M14 11a5 5 0 0 1 0 7l-1.2 1.2a5 5 0 0 1-7-7L7 11"/></svg>;
+        const UnlinkIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M12 12l7-7"/><path d="M3 21l7-7"/><path d="M10 14a5 5 0 0 1 0-7l1.2-1.2a5 5 0 0 1 7 7L17 13"/><path d="M14 11a5 5 0 0 1 0 7l-1.2 1.2a5 5 0 0 1-7-7L7 11"/></svg>;
+        const EraserIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20H9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 0 0-4Z"/><path d="M12 14l4 4"/></svg>;
+        const IndentIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 6H11"/><path d="M21 12H11"/><path d="M21 18H11"/><path d="M3 8l4 4-4 4"/></svg>;
+        const OutdentIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 6H11"/><path d="M21 12H11"/><path d="M21 18H11"/><path d="M7 8l-4 4 4 4"/></svg>;
 
         // --- Config ---
         const LOCAL_STORAGE_KEY = 'fishbone_pro_data_v1';
@@ -129,16 +224,15 @@
 
             useEffect(() => {
                 const el = ref.current;
-                if (el) {
-                    if (isExpanded) {
-                        el.style.height = 'auto';
-                        el.style.height = `${el.scrollHeight + 2}px`;
-                        el.style.width = 'auto';
-                        el.style.minWidth = '100%';
-                    } else {
-                        el.style.height = '100%';
-                        el.style.width = '100%';
-                    }
+                if (!el) return;
+                if (isExpanded) {
+                    el.style.height = 'auto';
+                    el.style.height = `${el.scrollHeight + 2}px`;
+                    el.style.width = 'auto';
+                    el.style.minWidth = '100%';
+                } else {
+                    el.style.height = '100%';
+                    el.style.width = '100%';
                 }
             }, [value, isExpanded]);
 
@@ -155,8 +249,8 @@
                         placeholder={placeholder}
                         className={`
                             w-full resize-none outline-none px-2 py-1.5 text-sm rounded transition-all duration-150
-                            ${isExpanded 
-                                ? 'absolute top-0 left-0 z-50 bg-white shadow-xl border border-blue-300 min-h-[48px]' 
+                            ${isExpanded
+                                ? 'absolute top-0 left-0 z-50 bg-white shadow-xl border border-blue-300 min-h-[48px]'
                                 : 'bg-transparent border-b border-transparent h-full overflow-hidden text-slate-600'
                             }
                         `}
@@ -166,168 +260,293 @@
             );
         };
 
-        // --- FIXED RichTextEditor with Enhanced Toolbar and Resizable Images ---
+        // --- RichTextEditor (Quill-based, avoids React infinite update loop) ---
         const RichTextEditor = ({ value, onChange }) => {
-            const editorRef = useRef(null);
+            const toolbarRef = useRef(null);
+            const editorHostRef = useRef(null);
+            const quillRef = useRef(null);
             const fileInputRef = useRef(null);
+
             const [selectedImg, setSelectedImg] = useState(null);
             const [imgWidth, setImgWidth] = useState(100);
-            
+
+            // Tracks what we believe the editor currently contains (as HTML)
+            const lastHtmlRef = useRef(value || '');
+
+            // When we programmatically paste/set HTML, Quill fires text-change.
+            // This flag prevents a "ping-pong" loop: editor -> React state -> editor -> ...
+            const applyingExternalRef = useRef(false);
+
+            const applyImageSelection = (imgEl) => {
+                try {
+                    const root = quillRef.current?.root;
+                    if (!root) return;
+                    root.querySelectorAll('img.selected').forEach(n => n.classList.remove('selected'));
+                    if (imgEl) {
+                        imgEl.classList.add('selected');
+                        setSelectedImg(imgEl);
+                        const currentWidth = imgEl.style.width || '100%';
+                        const parsed = parseInt(currentWidth, 10);
+                        setImgWidth(Number.isFinite(parsed) ? parsed : 100);
+                    } else {
+                        setSelectedImg(null);
+                    }
+                } catch (_) {
+                    setSelectedImg(null);
+                }
+            };
+
+            const safeEmitChange = (nextHtml) => {
+                // Only emit if it actually changed (prevents maximum update depth)
+                if (typeof nextHtml !== 'string') return;
+                if (nextHtml === lastHtmlRef.current) return;
+                lastHtmlRef.current = nextHtml;
+                onChange(nextHtml);
+            };
+
+            const insertImageDataUrl = (dataUrl) => {
+                const q = quillRef.current;
+                if (!q) return;
+
+                const sel = q.getSelection(true);
+                const index = sel ? sel.index : q.getLength();
+
+                q.insertEmbed(index, 'image', dataUrl, 'user');
+                q.setSelection(index + 1, 0, 'silent');
+
+                // Default styling. This direct DOM styling may not trigger Quill's delta,
+                // so we emit a change only if HTML differs.
+                setTimeout(() => {
+                    const root = q.root;
+                    const imgs = root.querySelectorAll('img');
+                    const last = imgs[imgs.length - 1];
+                    if (last) {
+                        last.style.width = '100%';
+                        last.style.borderRadius = '8px';
+                        last.style.margin = '10px 0';
+                        last.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                        safeEmitChange(q.root.innerHTML);
+                    }
+                }, 0);
+            };
+
+            // Init Quill once
             useEffect(() => {
-                if (editorRef.current) {
-                    const isActive = document.activeElement === editorRef.current;
-                    const currentHTML = editorRef.current.innerHTML;
-                    if (!isActive || Math.abs(currentHTML.length - value.length) > 10) {
-                        if (currentHTML !== value) {
-                            editorRef.current.innerHTML = value;
+                if (!editorHostRef.current || !toolbarRef.current) return;
+                if (!window.Quill) {
+                    console.error('Quill not loaded');
+                    return;
+                }
+
+                const q = new window.Quill(editorHostRef.current, {
+                    theme: 'snow',
+                    placeholder: 'Write notes here…',
+                    modules: {
+                        toolbar: {
+                            container: toolbarRef.current,
+                            handlers: {
+                                image: () => fileInputRef.current?.click(),
+                            }
                         }
                     }
+                });
+
+                quillRef.current = q;
+
+                // initial content
+                const initial = value || '';
+                if (initial) {
+                    applyingExternalRef.current = true;
+                    lastHtmlRef.current = initial;
+                    q.clipboard.dangerouslyPasteHTML(initial);
+                    // release in next tick after Quill finishes dispatching changes
+                    setTimeout(() => { applyingExternalRef.current = false; }, 0);
+                } else {
+                    lastHtmlRef.current = '';
                 }
-            }, [value]);
 
-            // Click listener to handle image selection
-            useEffect(() => {
-                const el = editorRef.current;
-                if (!el) return;
+                const onTextChange = () => {
+                    if (applyingExternalRef.current) {
+                        // Keep lastHtmlRef in sync without calling parent
+                        lastHtmlRef.current = q.root.innerHTML;
+                        return;
+                    }
+                    const html = q.root.innerHTML;
+                    safeEmitChange(html);
+                };
 
-                const handleClick = (e) => {
-                    if (e.target.tagName === 'IMG') {
-                        // Deselect previous
-                        if (selectedImg && selectedImg !== e.target) {
-                            selectedImg.classList.remove('selected');
-                        }
-                        
-                        e.target.classList.add('selected');
-                        setSelectedImg(e.target);
-                        
-                        // Parse current width percentage
-                        const currentWidth = e.target.style.width || '100%';
-                        setImgWidth(parseInt(currentWidth));
+                q.on('text-change', onTextChange);
+
+                // Click-to-select image for resizing
+                const onRootClick = (e) => {
+                    if (e.target?.tagName === 'IMG') {
+                        applyImageSelection(e.target);
                     } else {
-                        if (selectedImg) {
-                            selectedImg.classList.remove('selected');
-                            setSelectedImg(null);
+                        applyImageSelection(null);
+                    }
+                };
+
+                // Paste image support (more deterministic than default)
+                const onRootPaste = (e) => {
+                    const items = e.clipboardData?.items;
+                    if (!items) return;
+                    for (let i = 0; i < items.length; i++) {
+                        if (items[i].type && items[i].type.indexOf('image') !== -1) {
+                            e.preventDefault();
+                            const blob = items[i].getAsFile();
+                            if (!blob) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                                const dataUrl = ev.target?.result;
+                                if (typeof dataUrl === 'string') insertImageDataUrl(dataUrl);
+                            };
+                            reader.readAsDataURL(blob);
+                            return;
                         }
                     }
                 };
 
-                el.addEventListener('click', handleClick);
-                return () => el.removeEventListener('click', handleClick);
-            }, [selectedImg]);
+                q.root.addEventListener('click', onRootClick);
+                q.root.addEventListener('paste', onRootPaste);
 
-            const handleInput = () => {
-                if (editorRef.current) {
-                    onChange(editorRef.current.innerHTML);
-                }
-            };
+                return () => {
+                    try {
+                        q.off('text-change', onTextChange);
+                        q.root.removeEventListener('click', onRootClick);
+                        q.root.removeEventListener('paste', onRootPaste);
+                    } catch (_) {}
+                    quillRef.current = null;
+                    if (editorHostRef.current) editorHostRef.current.innerHTML = '';
+                };
+            }, []);
 
-            const exec = (cmd, val = null) => { 
-                document.execCommand(cmd, false, val); 
-                editorRef.current?.focus(); 
-                handleInput();
-            };
-            
-            const handlePaste = (e) => {
-                const items = e.clipboardData.items;
-                for (let i = 0; i < items.length; i++) {
-                    if (items[i].type.indexOf("image") !== -1) {
-                        e.preventDefault();
-                        const blob = items[i].getAsFile();
-                        if (blob) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                                document.execCommand('insertHTML', false, `<img src="${ev.target?.result}" style="width:100%; border-radius: 8px; margin: 10px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />`);
-                                handleInput();
-                            };
-                            reader.readAsDataURL(blob);
-                        }
-                    }
-                }
-            };
+            // External updates (React state -> Quill)
+            useEffect(() => {
+                const q = quillRef.current;
+                if (!q) return;
+
+                const next = value || '';
+                // If parent value equals what we already believe, do nothing
+                if (next === lastHtmlRef.current) return;
+
+                // Apply without causing a ping-pong loop
+                applyingExternalRef.current = true;
+                lastHtmlRef.current = next;
+
+                const sel = q.getSelection();
+                q.clipboard.dangerouslyPasteHTML(next);
+                if (sel) q.setSelection(sel);
+
+                setTimeout(() => { applyingExternalRef.current = false; }, 0);
+            }, [value]);
 
             const handleImageUpload = (e) => {
                 const file = e.target.files?.[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                        exec('insertHTML', `<img src="${ev.target?.result}" style="width:100%; border-radius: 8px; margin: 10px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />`);
-                    };
-                    reader.readAsDataURL(file);
-                }
-                e.target.value = ''; // Reset
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const dataUrl = ev.target?.result;
+                    if (typeof dataUrl === 'string') insertImageDataUrl(dataUrl);
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
             };
 
             const updateImageSize = (newWidth) => {
-                if (selectedImg) {
-                    setImgWidth(newWidth);
-                    selectedImg.style.width = `${newWidth}%`;
-                    handleInput();
+                if (!selectedImg) return;
+                setImgWidth(newWidth);
+                selectedImg.style.width = `${newWidth}%`;
+                const q = quillRef.current;
+                if (q) {
+                    // DOM style change may not trigger Quill event; emit only if changed
+                    safeEmitChange(q.root.innerHTML);
                 }
             };
 
             return (
                 <div className="w-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6 print:border-none print:shadow-none">
-                    {/* Main Toolbar */}
-                    <div className="bg-slate-50 border-b border-slate-200 px-2 py-2 flex flex-wrap items-center gap-1 print:hidden select-none">
-                        <span className="text-xs font-bold text-slate-400 mr-2 uppercase">Editor</span>
-                        
-                        {/* History */}
-                        <div className="flex gap-0.5 border-r border-slate-200 pr-1 mr-1">
-                            <button onClick={() => exec('undo')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Undo"><UndoIcon/></button>
-                            <button onClick={() => exec('redo')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Redo"><RedoIcon/></button>
-                        </div>
+                    {/* Toolbar (Quill) */}
+                    <div className="bg-slate-50 border-b border-slate-200 px-2 py-2 print:hidden select-none">
+                        <div ref={toolbarRef} className="flex flex-wrap items-center gap-1">
+                            {/* Header / Body */}
+                            <select className="ql-header text-xs font-semibold" defaultValue="">
+                                <option value="1">H1</option>
+                                <option value="2">H2</option>
+                                <option value="3">H3</option>
+                                <option value="">Body</option>
+                            </select>
 
-                        {/* Text Style */}
-                        <div className="flex gap-0.5 border-r border-slate-200 pr-1 mr-1">
-                            <button onClick={() => exec('bold')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Bold"><BoldIcon/></button>
-                            <button onClick={() => exec('italic')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Italic"><ItalicIcon/></button>
-                            <button onClick={() => exec('underline')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Underline"><UnderlineIcon/></button>
-                            <button onClick={() => exec('strikeThrough')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Strikethrough"><StrikeIcon/></button>
-                        </div>
+                            <span className="w-px h-6 bg-slate-200 mx-1" />
 
-                        {/* Alignment */}
-                        <div className="flex gap-0.5 border-r border-slate-200 pr-1 mr-1">
-                            <button onClick={() => exec('justifyLeft')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Align Left"><AlignLeft/></button>
-                            <button onClick={() => exec('justifyCenter')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Align Center"><AlignCenter/></button>
-                            <button onClick={() => exec('justifyRight')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Align Right"><AlignRight/></button>
-                        </div>
+                            {/* Colors */}
+                            <select className="ql-color" />
+                            <select className="ql-background" />
 
-                        {/* Lists */}
-                        <div className="flex gap-0.5 border-r border-slate-200 pr-1 mr-1">
-                            <button onClick={() => exec('insertUnorderedList')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Bullet List"><ListIcon/></button>
-                            <button onClick={() => exec('insertOrderedList')} className="p-1.5 hover:bg-white rounded text-slate-600" title="Number List"><ListOrderedIcon/></button>
-                        </div>
+                            <span className="w-px h-6 bg-slate-200 mx-1" />
 
-                        {/* Colors */}
-                        <div className="flex gap-1 border-r border-slate-200 pr-2 mr-1">
-                            <button onClick={() => exec('foreColor', '#1e293b')} className="w-5 h-5 rounded-full bg-slate-800 border border-slate-300" title="Black"></button>
-                            <button onClick={() => exec('foreColor', '#ef4444')} className="w-5 h-5 rounded-full bg-red-500 border border-red-200" title="Red"></button>
-                            <button onClick={() => exec('foreColor', '#3b82f6')} className="w-5 h-5 rounded-full bg-blue-500 border border-blue-200" title="Blue"></button>
-                            <button onClick={() => exec('foreColor', '#22c55e')} className="w-5 h-5 rounded-full bg-green-500 border border-green-200" title="Green"></button>
-                        </div>
+                            {/* Inline */}
+                            <button className="ql-bold" />
+                            <button className="ql-italic" />
+                            <button className="ql-underline" />
+                            <button className="ql-strike" />
 
-                        {/* Insert Image */}
-                        <button onClick={() => fileInputRef.current?.click()} className="p-1.5 hover:bg-white rounded text-slate-600 flex items-center gap-1 text-xs font-medium" title="Insert Image">
-                            <ImageIcon/> Image
-                        </button>
+                            <span className="w-px h-6 bg-slate-200 mx-1" />
+
+                            {/* Lists */}
+                            <button className="ql-list" value="bullet" />
+                            <button className="ql-list" value="ordered" />
+                            {/* Checklist: depending on Quill build/theme, value="check" may or may not render a checkbox style.
+                               If it doesn't, we can implement a custom blot later. */}
+                            <button className="ql-list" value="check" title="Checklist" />
+
+                            <span className="w-px h-6 bg-slate-200 mx-1" />
+
+                            {/* Link */}
+                            <button className="ql-link" />
+
+                            <span className="w-px h-6 bg-slate-200 mx-1" />
+
+                            {/* Align / Indent */}
+                            <select className="ql-align" />
+                            <button className="ql-indent" value="-1" />
+                            <button className="ql-indent" value="+1" />
+
+                            <span className="w-px h-6 bg-slate-200 mx-1" />
+
+                            {/* Super/Sub */}
+                            <button className="ql-script" value="super" />
+                            <button className="ql-script" value="sub" />
+
+                            <span className="w-px h-6 bg-slate-200 mx-1" />
+
+                            {/* Blocks */}
+                            <button className="ql-blockquote" />
+                            <button className="ql-code-block" />
+
+                            <span className="w-px h-6 bg-slate-200 mx-1" />
+
+                            {/* Image / Clean */}
+                            <button className="ql-image" />
+                            <button className="ql-clean" />
+                        </div>
                         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
                     </div>
 
-                    {/* Image Context Toolbar - Shows only when image selected */}
+                    {/* Image Context Toolbar */}
                     {selectedImg && (
                         <div className="bg-blue-50 border-b border-blue-100 px-3 py-1.5 flex items-center gap-4 text-sm animate-fade-in print:hidden">
                             <span className="text-blue-600 font-bold text-xs uppercase flex items-center gap-1">
-                                <ImageIcon/> Image Size
+                                <span className="inline-block w-2 h-2 rounded-full bg-blue-600" /> Image Size
                             </span>
-                            <input 
-                                type="range" 
-                                min="10" 
-                                max="100" 
-                                value={imgWidth} 
+                            <input
+                                type="range"
+                                min="10"
+                                max="100"
+                                value={imgWidth}
                                 onChange={(e) => updateImageSize(Number(e.target.value))}
                                 className="w-32 accent-blue-600 h-1.5"
                             />
-                            <span className="font-mono text-blue-700 w-8">{imgWidth}%</span>
+                            <span className="font-mono text-blue-700 w-10">{imgWidth}%</span>
                             <div className="flex gap-1">
                                 <button onClick={() => updateImageSize(25)} className="px-2 py-0.5 bg-white border border-blue-200 rounded text-xs text-blue-600 hover:bg-blue-100">S</button>
                                 <button onClick={() => updateImageSize(50)} className="px-2 py-0.5 bg-white border border-blue-200 rounded text-xs text-blue-600 hover:bg-blue-100">M</button>
@@ -337,13 +556,10 @@
                         </div>
                     )}
 
-                    <div 
-                        ref={editorRef} 
-                        contentEditable 
-                        className="p-6 min-h-[150px] outline-none text-slate-700 text-sm print:p-0 editor-content" 
-                        onInput={handleInput} 
-                        onPaste={handlePaste} 
-                    />
+                    {/* Editor */}
+                    <div className="editor-content">
+                        <div ref={editorHostRef} />
+                    </div>
                 </div>
             );
         };
@@ -354,25 +570,27 @@
             const [rows, setRows] = useState(DEMO_DATA);
             const [notes, setNotes] = useState("<div>Notes...</div>");
             const [scale, setScale] = useState(1);
-            const [baseFontSize, setBaseFontSize] = useState(14); 
+            const [baseFontSize, setBaseFontSize] = useState(14);
             const [pan, setPan] = useState({ x: 0, y: 0 });
             const [isDragging, setIsDragging] = useState(false);
             const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-            const [isAutoSaved, setIsAutoSaved] = useState(false); 
-            
+            const [isAutoSaved, setIsAutoSaved] = useState(false);
+            const [highlightRowId, setHighlightRowId] = useState(null);
+
             const fileInputRef = useRef(null);
             const canvasRef = useRef(null);
+            const highlightTimeoutRef = useRef(null);
 
             useEffect(() => {
                 try {
                     const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
                     if (savedData) {
                         const parsed = JSON.parse(savedData);
-                        if(parsed.problem) setProblem(parsed.problem);
-                        if(parsed.problemDesc) setProblemDesc(parsed.problemDesc);
-                        if(parsed.rows) setRows(parsed.rows);
-                        if(parsed.notes) setNotes(parsed.notes);
-                        if(parsed.baseFontSize) setBaseFontSize(parsed.baseFontSize);
+                        if (parsed.problem) setProblem(parsed.problem);
+                        if (parsed.problemDesc) setProblemDesc(parsed.problemDesc);
+                        if (parsed.rows) setRows(parsed.rows);
+                        if (parsed.notes) setNotes(parsed.notes);
+                        if (parsed.baseFontSize) setBaseFontSize(parsed.baseFontSize);
                     }
                 } catch (e) {}
             }, []);
@@ -389,6 +607,20 @@
                 return () => clearTimeout(timeoutId);
             }, [problem, problemDesc, rows, notes, baseFontSize]);
 
+            const scrollToRow = useCallback((rowId) => {
+                if (!rowId) return;
+                const el = document.getElementById(`verify-row-${rowId}`);
+                if (!el) return;
+
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setHighlightRowId(rowId);
+
+                if (highlightTimeoutRef.current) {
+                    clearTimeout(highlightTimeoutRef.current);
+                }
+                highlightTimeoutRef.current = setTimeout(() => setHighlightRowId(null), 1800);
+            }, []);
+
             const handleRowChange = (id, field, value) => setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
             const insertRowAfter = (index) => {
                 const currentRow = rows[index];
@@ -399,10 +631,10 @@
             };
             const deleteRow = (id) => setRows(rows.filter(r => r.id !== id));
             const addFirstRow = () => setRows([{ id: 1, category: "Primary", cause: "Secondary", factor: "Factor", method: "", evidence: "", status: 'ON_GOING', isPriority: false }]);
-            const clearData = () => { 
-                if(confirm("Are you sure you want to clear all data?")) { 
+            const clearData = () => {
+                if (confirm("Are you sure you want to clear all data?")) {
                     setRows([]); setNotes(""); setProblem("Main Problem"); setProblemDesc("");
-                    try { localStorage.removeItem(LOCAL_STORAGE_KEY); } catch(e) {}
+                    try { localStorage.removeItem(LOCAL_STORAGE_KEY); } catch (e) {}
                 }
             };
             const handleSave = () => {
@@ -420,11 +652,13 @@
                 reader.onload = (ev) => {
                     try {
                         const data = JSON.parse(ev.target?.result);
-                        if(data.problem) setProblem(data.problem);
-                        if(data.problemDesc) setProblemDesc(data.problemDesc);
-                        if(data.rows) setRows(data.rows);
-                        if(data.notes) setNotes(data.notes);
-                    } catch (err) { alert("Invalid file"); }
+                        if (data.problem) setProblem(data.problem);
+                        if (data.problemDesc) setProblemDesc(data.problemDesc);
+                        if (data.rows) setRows(data.rows);
+                        if (data.notes) setNotes(data.notes);
+                    } catch (err) {
+                        alert("Invalid file");
+                    }
                 };
                 reader.readAsText(file);
                 e.target.value = '';
@@ -445,84 +679,79 @@
                         if (!causeGroups[cause]) causeGroups[cause] = [];
                         causeGroups[cause].push(row);
                     });
-                    return { name: catName, causes: Object.entries(causeGroups).map(([causeName, factors]) => ({ name: causeName, factors: factors })) };
+                    return { name: catName, causes: Object.entries(causeGroups).map(([causeName, factors]) => ({ name: causeName, factors })) };
                 });
             }, [rows]);
 
             const layoutConfig = useMemo(() => {
                 const fontGrowth = Math.max(0, baseFontSize - 14);
-                const s = 1 + (fontGrowth * 0.01); 
+                const s = 1 + (fontGrowth * 0.01);
                 return {
                     s,
                     fontSize: baseFontSize,
                     smallFontSize: Math.max(10, baseFontSize - 2),
                     categorySpacing: 350 + (fontGrowth * 6),
-                    factorSpacing: 25 + (fontGrowth * 0.5), 
+                    factorSpacing: 25 + (fontGrowth * 0.5),
                     minBoneLength: 220 + (fontGrowth * 2),
                     verticalBranchGap: 130 + (fontGrowth * 3.5),
-                    problemFontSize: 24, 
-                    headScale: 1.0 
+                    problemFontSize: 24,
+                    headScale: 1.0
                 };
             }, [baseFontSize]);
 
-            // --- REFACTORED GEOMETRY CALCULATION WITH AUTO-HEIGHT ---
-            const { elements: fishboneElements, totalWidth, totalHeight, viewportY } = useMemo(() => {
+            const { elements: fishboneElements, totalWidth, totalHeight } = useMemo(() => {
                 const { s, fontSize, smallFontSize, categorySpacing, verticalBranchGap, problemFontSize, headScale } = layoutConfig;
 
-                // 1. First Pass: Calculate Structure & Max Heights
                 let maxTopHeight = 0;
                 let maxBottomHeight = 0;
 
                 const categoriesWithLayout = fishboneStructure.map((cat, index) => {
                     const isTop = index % 2 === 0;
-                    // Calculate bone length needed for this category
                     let totalSpacingNeeded = cat.causes.length * verticalBranchGap + (100 * s);
                     const boneLength = Math.max(layoutConfig.minBoneLength, totalSpacingNeeded);
-                    
+
                     if (isTop) maxTopHeight = Math.max(maxTopHeight, boneLength);
                     else maxBottomHeight = Math.max(maxBottomHeight, boneLength);
 
                     const causesWithLayout = cat.causes.map(cause => {
                         let currentPos = 40 * s;
-                        const factorsWithPos = cause.factors.map((f, i) => {
+                        const factorsWithPos = cause.factors.map((f) => {
                             const statusConfig = STATUS_OPTIONS[f.status] || STATUS_OPTIONS.ON_GOING;
                             const prefix = statusConfig.icon + " ";
                             const fullText = prefix + f.factor + (f.isPriority ? " ⭐" : "");
                             const width = getTextWidth(fullText, smallFontSize);
-                            const step = width * 0.7 + (15 * s); 
+                            const step = width * 0.7 + (15 * s);
                             const pos = currentPos;
-                            currentPos += step; 
+                            currentPos += step;
                             return { ...f, xOffset: pos, width, statusIcon: statusConfig.icon };
                         });
-                        const totalLen = currentPos + (40 * s); 
+                        const totalLen = currentPos + (40 * s);
                         const causeTextW = getTextWidth(cause.name, fontSize);
                         const finalLen = Math.max(totalLen, causeTextW + (60 * s));
                         return { ...cause, factors: factorsWithPos, totalLen: finalLen };
                     });
+
                     return { ...cat, causes: causesWithLayout, boneLength, isTop };
                 });
 
-                // 2. Determine Dynamic Spine Y and Canvas Height
-                const verticalPadding = 150; // Padding for text above/below bones
-                const dynamicSpineY = maxTopHeight + verticalPadding;
-                const dynamicTotalHeight = dynamicSpineY + maxBottomHeight + verticalPadding;
+                const verticalPadding = 150;
+                const spineY = maxTopHeight + verticalPadding;
+                const dynamicTotalHeight = spineY + maxBottomHeight + verticalPadding;
 
-                // 3. Determine Head Position & Auto-Shift
                 let maxCauseLenInFirstCat = 0;
                 if (categoriesWithLayout.length > 0) {
                     categoriesWithLayout[0].causes.forEach(c => {
                         if (c.totalLen > maxCauseLenInFirstCat) maxCauseLenInFirstCat = c.totalLen;
                     });
                 }
-                
-                // Calculate Problem Text Size for Dynamic Head
+
                 const problemTextWidth = getTextWidth(problem, problemFontSize);
                 const minHeadW = 280;
                 const dynamicHeadW = Math.max(minHeadW, problemTextWidth + 100);
-                
+
                 const headGap = Math.max(260 * s, maxCauseLenInFirstCat + 80);
                 const rawDynamicHeadX = Math.max(
-                    1200 - 250, 
+                    1200 - 250,
                     200 + categoriesWithLayout.length * categorySpacing
                 );
 
@@ -536,22 +765,19 @@
                 const dynamicHeadX = rawDynamicHeadX + shiftRight;
                 const firstBoneX = dynamicHeadX - headGap;
                 const lastBoneX = firstBoneX - ((categoriesWithLayout.length - 1) * categorySpacing);
-                const finalSpineStart = lastBoneX - 100; 
+                const spineStartX = lastBoneX - 100;
 
                 const headW = dynamicHeadW * headScale;
-                const headH = 140 * headScale; // Increased height
-                const requiredWidth = dynamicHeadX + headW + 250; // Increased right padding
+                const headH = 140 * headScale;
+                const requiredWidth = dynamicHeadX + headW + 250;
 
-                // 4. Render
                 const elements = [];
-                const spineY = dynamicSpineY; // Use dynamic Y
 
-                elements.push(<path key="tail" d={`M ${finalSpineStart} ${spineY} L ${finalSpineStart - 60} ${spineY - 50} Q ${finalSpineStart - 40} ${spineY} ${finalSpineStart - 60} ${spineY + 50} Z`} fill="#3b82f6" opacity="0.8" />);
-                elements.push(<line key="spine" x1={finalSpineStart} y1={spineY} x2={dynamicHeadX} y2={spineY} stroke="#475569" strokeWidth={6 * s} strokeLinecap="round" />);
-                
-                // Improved Head Shape
+                elements.push(<path key="tail" d={`M ${spineStartX} ${spineY} L ${spineStartX - 60} ${spineY - 50} Q ${spineStartX - 40} ${spineY} ${spineStartX - 60} ${spineY + 50} Z`} fill="#3b82f6" opacity="0.8" />);
+                elements.push(<line key="spine" x1={spineStartX} y1={spineY} x2={dynamicHeadX} y2={spineY} stroke="#475569" strokeWidth={6 * s} strokeLinecap="round" />);
+
                 const headPath = `
-                    M ${dynamicHeadX} ${spineY - headH/2} 
+                    M ${dynamicHeadX} ${spineY - headH/2}
                     Q ${dynamicHeadX + headW/2} ${spineY - headH/2 - 20} ${dynamicHeadX + headW} ${spineY}
                     Q ${dynamicHeadX + headW/2} ${spineY + headH/2 + 20} ${dynamicHeadX} ${spineY + headH/2}
                     Q ${dynamicHeadX - 40} ${spineY} ${dynamicHeadX} ${spineY - headH/2}
@@ -576,7 +802,7 @@
                 categoriesWithLayout.forEach((cat, index) => {
                     const { isTop, boneLength, causes } = cat;
                     const endY = isTop ? spineY - boneLength : spineY + boneLength;
-                    const boneEndX = currentX - (boneLength * 0.45); 
+                    const boneEndX = currentX - (boneLength * 0.45);
 
                     elements.push(
                         <g key={`cat-${index}`}>
@@ -591,16 +817,16 @@
                     let distFromSpine = 70 * s;
 
                     causes.forEach((causeGroup, cIndex) => {
-                        const totalDist = Math.sqrt(Math.pow(boneEndX - currentX, 2) + Math.pow(endY - spineY, 2));
+                        const totalDist = Math.hypot(boneEndX - currentX, endY - spineY);
                         const t = distFromSpine / totalDist;
                         const rootX = currentX + (boneEndX - currentX) * t;
                         const rootY = spineY + (endY - spineY) * t;
                         const causeLen = Math.max(160 * s, causeGroup.totalLen);
-                        const causeEndX = rootX + causeLen; 
+                        const causeEndX = rootX + causeLen;
                         const causeEndY = rootY;
 
                         elements.push(
-                            <g key={`cause-${index}-${cIndex}`}>
+                            <g key={`cause-${index}-${cIndex}`} onClick={() => scrollToRow(causeGroup.factors?.[0]?.id)} style={{cursor:'pointer'}}>
                                 <line x1={rootX} y1={rootY} x2={causeEndX} y2={causeEndY} stroke="#94a3b8" strokeWidth={3*s} strokeLinecap="round" />
                                 <text x={causeEndX + 8} y={causeEndY + 5} fontSize={fontSize} fontWeight="bold" fill="#334155" textAnchor="start">{causeGroup.name}</text>
                             </g>
@@ -610,9 +836,9 @@
                             const factorRootX = rootX + factor.xOffset;
                             const factorRootY = rootY;
                             const isUpFactor = fIndex % 2 === 0;
-                            const branchLen = 30 * s; 
+                            const branchLen = 30 * s;
                             const branchEndY = factorRootY + (isUpFactor ? -branchLen : branchLen);
-                            const branchEndX = factorRootX + (15 * s); 
+                            const branchEndX = factorRootX + (15 * s);
                             const statusConfig = STATUS_OPTIONS[factor.status] || STATUS_OPTIONS.ON_GOING;
                             const isExclude = factor.status === 'EXCLUDE';
                             const isPriority = factor.isPriority === true;
@@ -623,7 +849,7 @@
                             const textY = isUpFactor ? branchEndY - 5 : branchEndY + 14;
 
                             elements.push(
-                                <g key={`fact-${factor.id}`}>
+                                <g key={`fact-${factor.id}`} onClick={() => scrollToRow(factor.id)} style={{cursor:'pointer'}}>
                                     <circle cx={factorRootX} cy={factorRootY} r={2*s} fill="#cbd5e1" />
                                     <line x1={factorRootX} y1={factorRootY} x2={branchEndX} y2={branchEndY} stroke={strokeColor} strokeWidth={strokeWidth} />
                                     <text x={branchEndX - 5} y={textY} fontSize={smallFontSize} fill={textColor} fontWeight={fontWeight} textDecoration={isExclude ? 'line-through' : 'none'} textAnchor="start">
@@ -632,13 +858,19 @@
                                 </g>
                             );
                         });
-                        distFromSpine += verticalBranchGap; 
+
+                        distFromSpine += verticalBranchGap;
                     });
+
                     currentX -= categorySpacing;
                 });
 
-                return { elements, totalWidth: Math.max(1200, requiredWidth), totalHeight: Math.max(750, dynamicTotalHeight), viewportY: 0 };
-            }, [fishboneStructure, layoutConfig, problem]);
+                return {
+                    elements,
+                    totalWidth: Math.max(1200, requiredWidth),
+                    totalHeight: Math.max(750, dynamicTotalHeight)
+                };
+            }, [fishboneStructure, layoutConfig, problem, scrollToRow]);
 
             useEffect(() => {
                 const canvasEl = canvasRef.current;
@@ -650,7 +882,7 @@
                     setScale(s => Math.min(Math.max(0.3, s * delta), 3));
                 };
                 canvasEl.addEventListener('wheel', onWheel, { passive: false });
-                return () => { canvasEl.removeEventListener('wheel', onWheel); };
+                return () => canvasEl.removeEventListener('wheel', onWheel);
             }, []);
 
             return (
@@ -658,7 +890,10 @@
                     <header className="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center sticky top-0 z-50 print:hidden">
                         <div className="flex items-center gap-3">
                             <div className="bg-slate-900 text-white p-1.5 rounded-lg"><Maximize size={20} /></div>
-                            <div><h1 className="font-bold text-lg leading-tight">Fishbone Pro</h1><p className="text-xs text-slate-500">RCA Edition</p></div>
+                            <div>
+                                <h1 className="font-bold text-lg leading-tight">Fishbone Pro</h1>
+                                <p className="text-xs text-slate-500">RCA Edition</p>
+                            </div>
                         </div>
                         <div className="flex gap-4 items-center">
                             <div className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all duration-300 ${isAutoSaved ? 'opacity-100 bg-green-100 text-green-700 scale-105' : 'opacity-0 scale-95'}`}>
@@ -699,14 +934,21 @@
                             <div className="absolute bottom-4 right-4 z-10 flex gap-2 print:hidden">
                                 <button onClick={() => {setScale(1); setPan({x:0,y:0})}} className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm text-xs font-bold text-slate-600">Reset View</button>
                             </div>
-                            
-                            <div ref={canvasRef} className={`w-full h-full bg-slate-50 cursor-grab active:cursor-grabbing print:bg-white ${isDragging ? 'cursor-grabbing' : ''}`}
+
+                            <div
+                                ref={canvasRef}
+                                className={`w-full h-full bg-slate-50 cursor-grab active:cursor-grabbing print:bg-white ${isDragging ? 'cursor-grabbing' : ''}`}
                                 onMouseDown={(e) => { if(e.button===0) { setIsDragging(true); setDragStart({x: e.clientX-pan.x, y: e.clientY-pan.y}) }}}
                                 onMouseMove={(e) => { if(isDragging) setPan({x: e.clientX-dragStart.x, y: e.clientY-dragStart.y}) }}
-                                onMouseUp={() => setIsDragging(false)} onMouseLeave={() => setIsDragging(false)}>
-                                {/* Updated viewBox to use dynamic Height */}
+                                onMouseUp={() => setIsDragging(false)}
+                                onMouseLeave={() => setIsDragging(false)}
+                            >
                                 <svg width="100%" height="100%" viewBox={`${-pan.x} ${-pan.y} ${totalWidth} ${totalHeight}`} style={{transform: `scale(${scale})`, transformOrigin: '0 0', transition: isDragging ? 'none' : 'transform 0.1s ease-out'}}>
-                                    <defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" strokeWidth="1"/></pattern></defs>
+                                    <defs>
+                                        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" strokeWidth="1"/>
+                                        </pattern>
+                                    </defs>
                                     <rect x={-5000} y={-5000} width="10000" height="10000" fill="url(#grid)" className="print:hidden" />
                                     {fishboneElements}
                                 </svg>
@@ -717,10 +959,13 @@
                             <div className="flex justify-between items-center mb-4 print:hidden">
                                 <h2 className="text-lg font-bold flex items-center gap-2"><FileText size={20} className="text-blue-600"/>Hypothesis Verification</h2>
                                 <div className="flex gap-2">
-                                    {rows.length === 0 && <button onClick={addFirstRow} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-md text-sm font-medium hover:bg-blue-100 flex items-center gap-1"><Plus size={16}/> Add First Row</button>}
+                                    {rows.length === 0 && (
+                                        <button onClick={addFirstRow} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-md text-sm font-medium hover:bg-blue-100 flex items-center gap-1"><Plus size={16}/> Add First Row</button>
+                                    )}
                                     <button onClick={clearData} className="px-3 py-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md text-sm transition flex items-center gap-1"><Trash2 size={16}/> Clear / Reset</button>
                                 </div>
                             </div>
+
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left text-sm border-collapse min-w-[1200px]">
                                     <thead>
@@ -737,15 +982,21 @@
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {rows.map((row, index) => (
-                                            <tr key={row.id} className="group hover:bg-slate-50 transition-colors">
+                                            <tr id={`verify-row-${row.id}`} key={row.id} className={`group hover:bg-slate-50 transition-colors ${highlightRowId===row.id ? 'bg-yellow-100 ring-2 ring-yellow-300' : ''}`}>
                                                 <td className="p-2 align-top text-center">
                                                     <button onClick={() => handleRowChange(row.id, 'isPriority', !row.isPriority)} className="p-1.5 hover:bg-orange-50 rounded-full transition">
                                                         <Star size={18} filled={row.isPriority} />
                                                     </button>
                                                 </td>
-                                                <td className="p-2 align-top"><input type="text" value={row.category} onChange={e => handleRowChange(row.id, 'category', e.target.value)} className="w-full bg-transparent font-bold text-slate-700 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Category" /></td>
-                                                <td className="p-2 align-top"><input type="text" value={row.cause} onChange={e => handleRowChange(row.id, 'cause', e.target.value)} className="w-full bg-transparent text-slate-700 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Cause" /></td>
-                                                <td className="p-2 align-top bg-blue-50/30 rounded"><input type="text" value={row.factor} onChange={e => handleRowChange(row.id, 'factor', e.target.value)} className="w-full bg-transparent font-medium text-blue-900 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Hypothesis" /></td>
+                                                <td className="p-2 align-top">
+                                                    <input type="text" value={row.category} onChange={e => handleRowChange(row.id, 'category', e.target.value)} className="w-full bg-transparent font-bold text-slate-700 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Category" />
+                                                </td>
+                                                <td className="p-2 align-top">
+                                                    <input type="text" value={row.cause} onChange={e => handleRowChange(row.id, 'cause', e.target.value)} className="w-full bg-transparent text-slate-700 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Cause" />
+                                                </td>
+                                                <td className="p-2 align-top bg-blue-50/30 rounded">
+                                                    <input type="text" value={row.factor} onChange={e => handleRowChange(row.id, 'factor', e.target.value)} className="w-full bg-transparent font-medium text-blue-900 outline-none border-b border-transparent focus:border-blue-400 px-1 py-1" placeholder="Hypothesis" />
+                                                </td>
                                                 <td className="p-2 align-top"><HoverTextarea value={row.method} onChange={e => handleRowChange(row.id, 'method', e.target.value)} placeholder="Method"/></td>
                                                 <td className="p-2 align-top"><HoverTextarea value={row.evidence} onChange={e => handleRowChange(row.id, 'evidence', e.target.value)} placeholder="Result"/></td>
                                                 <td className="p-2 align-top">
@@ -764,12 +1015,29 @@
                                     </tbody>
                                 </table>
                             </div>
+
                             <RichTextEditor value={notes} onChange={setNotes} />
                         </div>
                     </div>
                 </div>
             );
         };
+
+        // -----------------------------
+        // Smoke tests (quick sanity checks)
+        // -----------------------------
+        function runSmokeTests() {
+            console.assert(!!React && !!ReactDOM, 'React/ReactDOM should be loaded');
+            console.assert(typeof STATUS_OPTIONS === 'object', 'STATUS_OPTIONS should exist');
+            console.assert(Array.isArray(DEMO_DATA), 'DEMO_DATA should be an array');
+            console.assert(typeof getTextWidth === 'function', 'getTextWidth should be a function');
+            console.assert(typeof document.execCommand === 'function', 'document.execCommand should be available (browser dependent)');
+            console.assert(!!window.Quill, 'Quill should be loaded');
+            // Additional sanity: avoid undefined localStorage key
+            console.assert(typeof LOCAL_STORAGE_KEY === 'string' && LOCAL_STORAGE_KEY.length > 0, 'LOCAL_STORAGE_KEY should be a non-empty string');
+        }
+
+        runSmokeTests();
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
