@@ -424,6 +424,21 @@
                     return;
                 }
 
+                // Register width style attributor so image width persists across save/load.
+                // Without this, Quill's clipboard conversion may drop inline width styles.
+                try {
+                    if (!window.__fishboneQuillWidthRegistered) {
+                        const Parchment = window.Quill.import('parchment');
+                        const WidthStyle = new Parchment.Attributor.Style('width', 'width', {
+                            scope: Parchment.Scope.INLINE,
+                        });
+                        window.Quill.register(WidthStyle, true);
+                        window.__fishboneQuillWidthRegistered = true;
+                    }
+                } catch (e) {
+                    console.warn('Width attributor registration failed:', e);
+                }
+
                 const q = new window.Quill(editorHostRef.current, {
                     theme: 'snow',
                     placeholder: 'Write notes here…',
@@ -541,12 +556,31 @@
             const updateImageSize = (newWidth) => {
                 if (!selectedImg) return;
                 setImgWidth(newWidth);
-                selectedImg.style.width = `${newWidth}%`;
+
                 const q = quillRef.current;
-                if (q) {
-                    // DOM style change may not trigger Quill event; emit only if changed
-                    safeEmitChange(q.root.innerHTML);
+                const widthVal = `${newWidth}%`;
+
+                // Apply via Quill format so it persists (Delta + clipboard).
+                try {
+                    if (q && window.Quill && typeof window.Quill.find === 'function') {
+                        const blot = window.Quill.find(selectedImg);
+                        if (blot) {
+                            const idx = q.getIndex(blot);
+                            // Ensure selection is on the embed, then apply format.
+                            q.setSelection(idx, 1, 'silent');
+                            q.format('width', widthVal, 'user');
+                        }
+                    }
+                } catch (e) {
+                    // Fallback to DOM style only
+                    console.warn('Quill width format failed, fallback to DOM style:', e);
                 }
+
+                // Always keep DOM style in sync for immediate UI.
+                selectedImg.style.width = widthVal;
+
+                // DOM style change may not trigger Quill event; emit only if changed
+                if (q) safeEmitChange(q.root.innerHTML);
             };
 
             return (
