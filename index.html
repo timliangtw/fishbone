@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fishbone Pro - Enhanced Editor</title>
+    <title>Fishbone Pro - Beautiful Head</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -514,6 +514,12 @@
                         if (c.totalLen > maxCauseLenInFirstCat) maxCauseLenInFirstCat = c.totalLen;
                     });
                 }
+                
+                // Calculate Problem Text Size for Dynamic Head
+                const problemTextWidth = getTextWidth(problem, problemFontSize);
+                const minHeadW = 280;
+                const dynamicHeadW = Math.max(minHeadW, problemTextWidth + 100);
+                
                 const headGap = Math.max(260 * s, maxCauseLenInFirstCat + 80);
                 const rawDynamicHeadX = Math.max(
                     1200 - 250, 
@@ -532,8 +538,8 @@
                 const lastBoneX = firstBoneX - ((categoriesWithLayout.length - 1) * categorySpacing);
                 const finalSpineStart = lastBoneX - 100; 
 
-                const headW = 240 * headScale;
-                const headH = 90 * headScale;
+                const headW = dynamicHeadW * headScale;
+                const headH = 140 * headScale; // Increased height
                 const requiredWidth = dynamicHeadX + headW + 250; // Increased right padding
 
                 // 4. Render
@@ -543,14 +549,23 @@
                 elements.push(<path key="tail" d={`M ${finalSpineStart} ${spineY} L ${finalSpineStart - 60} ${spineY - 50} Q ${finalSpineStart - 40} ${spineY} ${finalSpineStart - 60} ${spineY + 50} Z`} fill="#3b82f6" opacity="0.8" />);
                 elements.push(<line key="spine" x1={finalSpineStart} y1={spineY} x2={dynamicHeadX} y2={spineY} stroke="#475569" strokeWidth={6 * s} strokeLinecap="round" />);
                 
+                // Improved Head Shape
+                const headPath = `
+                    M ${dynamicHeadX} ${spineY - headH/2} 
+                    Q ${dynamicHeadX + headW/2} ${spineY - headH/2 - 20} ${dynamicHeadX + headW} ${spineY}
+                    Q ${dynamicHeadX + headW/2} ${spineY + headH/2 + 20} ${dynamicHeadX} ${spineY + headH/2}
+                    Q ${dynamicHeadX - 40} ${spineY} ${dynamicHeadX} ${spineY - headH/2}
+                    Z
+                `;
+
                 elements.push(
                     <g key="head">
-                        <path d={`M ${dynamicHeadX} ${spineY - headH} L ${dynamicHeadX + headW} ${spineY} L ${dynamicHeadX} ${spineY + headH} Q ${dynamicHeadX - 40} ${spineY} ${dynamicHeadX} ${spineY - headH} Z`} fill="#3b82f6" className="drop-shadow-xl" />
-                        <circle cx={dynamicHeadX + (headW * 0.66)} cy={spineY - 20} r={10} fill="white" />
-                        <circle cx={dynamicHeadX + (headW * 0.66)} cy={spineY - 20} r={4} fill="black" />
-                        <foreignObject x={dynamicHeadX - 30} y={spineY - (headH * 0.8)} width={headW + 20} height={headH * 1.6} style={{pointerEvents: 'none'}}>
-                            <div className="flex items-center justify-center h-full px-4 text-center">
-                                <span className="text-white font-bold leading-tight drop-shadow-md" style={{fontSize: `${problemFontSize}px`}}>{problem}</span>
+                        <path d={headPath} fill="#3b82f6" className="drop-shadow-xl" />
+                        <circle cx={dynamicHeadX + (headW * 0.7)} cy={spineY - 20} r={10} fill="white" />
+                        <circle cx={dynamicHeadX + (headW * 0.7)} cy={spineY - 20} r={4} fill="black" />
+                        <foreignObject x={dynamicHeadX} y={spineY - (headH/2)} width={headW} height={headH} style={{pointerEvents: 'none'}}>
+                            <div className="flex items-center justify-center h-full px-8 text-center">
+                                <span className="text-white font-bold leading-tight drop-shadow-md break-words" style={{fontSize: `${problemFontSize}px`}}>{problem}</span>
                             </div>
                         </foreignObject>
                     </g>
