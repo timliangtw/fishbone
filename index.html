@@ -660,7 +660,7 @@
             const [pan, setPan] = useState({ x: 0, y: 0 });
             const [isDragging, setIsDragging] = useState(false);
             const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-            const [isFileSaved, setIsFileSaved] = useState(false);
+            const [toast, setToast] = useState({ show: false, text: '' });
             const [saveHandle, setSaveHandle] = useState(null);
             const [saveTargetName, setSaveTargetName] = useState('');
             const [highlightRowId, setHighlightRowId] = useState(null);
@@ -695,6 +695,17 @@
             const canvasRef = useRef(null);
             const highlightTimeoutRef = useRef(null);
 
+            // Avoid stale closures when saving via keyboard shortcuts
+            const saveHandleRef = useRef(null);
+            const savingRef = useRef(false);
+            const shortcutHitsRef = useRef(0);
+            const [shortcutHits, setShortcutHits] = useState(0);
+            const [lastShortcutAction, setLastShortcutAction] = useState('');
+            const latestRef = useRef(null);
+            const handleSaveCallRef = useRef(null);
+            // Keep the newest snapshot for saving (prevents intermittent "saved old state" from stale closures)
+            latestRef.current = { problem, problemDesc, rows, notes, baseFontSize };
+
             useEffect(() => {
                 // Restore local data
                 try {
@@ -707,7 +718,9 @@
                         if (parsed.notes) setNotes(parsed.notes);
                         if (parsed.baseFontSize) setBaseFontSize(parsed.baseFontSize);
                     }
-                                } catch (e) {}
+                } catch (_) {
+                    // ignore
+                }
             }, []);
 
             useEffect(() => {
@@ -719,6 +732,11 @@
                     } catch (_) {}
                 })();
             }, []);
+
+            useEffect(() => {
+                // Keep ref in sync (used by Ctrl+S handler to avoid stale state)
+                saveHandleRef.current = saveHandle;
+            }, [saveHandle]);
 
             useEffect(() => {
                 // Derive a friendly file name for UI (best-effort; may fail in some permission models)
@@ -735,31 +753,56 @@
 
             useEffect(() => {
                 // Keyboard shortcut: Ctrl+S / Cmd+S => Save.
-                // Notes:
-                // - keydown auto-repeats when keys are held down, so ignore repeats.
-                // - if native save isn't available (iframe/insecure context), don't trigger download via shortcut.
+                // Fixes:
+                // 1) Use e.code===KeyS (layout-independent) + e.key fallback
+                // 2) Ignore key repeat
+                // 3) Prevent default browser "Save Page" dialog
+                // 4) Use refs so we don't get a stale handleSave/saveHandle closure
                 const onKeyDown = (e) => {
-                    const key = (e.key || '').toLowerCase();
-                    if ((e.ctrlKey || e.metaKey) && key === 's') {
+                    const isS = (e.code === 'KeyS') || ((e.key || '').toLowerCase() === 's');
+                    if ((e.ctrlKey || e.metaKey) && isS) {
                         if (e.repeat) return;
-                        e.preventDefault();
-                        e.stopPropagation();
+                        try { e.preventDefault(); } catch (_) {}
+                        try { e.stopPropagation(); } catch (_) {}
+                        try { e.stopImmediatePropagation?.(); } catch (_) {}
 
-                        // In fallback mode, Ctrl+S can cause Chrome "Save As" dialogs (download settings).
-                        // Let user click "Download Copy" explicitly instead.
-                        if (!nativeSaveAvailable) return;
+                        // If native save isn't available, don't trigger browser download via shortcut.
+                        if (!nativeSaveAvailable) {
+                            shortcutHitsRef.current += 1;
+                            setShortcutHits(shortcutHitsRef.current);
+                            setLastShortcutAction('Blocked (native save unavailable)');
+                            return;
+                        }
 
-                        // Guard against double-trigger while file picker is opening / save is in-flight.
-                        if (window.__fishboneSaving) return;
-                        window.__fishboneSaving = true;
-                        Promise.resolve(handleSave()).finally(() => {
-                            window.__fishboneSaving = false;
+                        // Guard against double-trigger while picker is opening / save is in-flight.
+                        if (savingRef.current) return;
+                        savingRef.current = true;
+
+                        shortcutHitsRef.current += 1;
+                        setShortcutHits(shortcutHitsRef.current);
+                        setLastShortcutAction('Saving…');
+
+                        Promise.resolve().then(async () => {
+                            const fn = handleSaveCallRef.current || handleSave;
+                            await fn();
+                            setLastShortcutAction('Saved');
+                        }).catch((err) => {
+                            console.error(err);
+                            setLastShortcutAction('Save failed');
+                        }).finally(() => {
+                            savingRef.current = false;
                         });
                     }
                 };
+
+                // Register on both window and document (some editors play with event handling)
                 window.addEventListener('keydown', onKeyDown, true);
-                return () => window.removeEventListener('keydown', onKeyDown, true);
-            }, [handleSave, nativeSaveAvailable]);
+                document.addEventListener('keydown', onKeyDown, true);
+                return () => {
+                    window.removeEventListener('keydown', onKeyDown, true);
+                    document.removeEventListener('keydown', onKeyDown, true);
+                };
+            }, [nativeSaveAvailable]);
 
             
 
@@ -777,15 +820,17 @@
                 highlightTimeoutRef.current = setTimeout(() => setHighlightRowId(null), 1800);
             }, []);
 
-            const handleRowChange = (id, field, value) => setRows(rows.map(r => r.id === id ? { ...r, [field]: value } : r));
+            const handleRowChange = (id, field, value) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
             const insertRowAfter = (index) => {
-                const currentRow = rows[index];
-                const newId = rows.length > 0 ? Math.max(...rows.map(r => r.id)) + 1 : 1;
-                const newRows = [...rows];
-                newRows.splice(index + 1, 0, { ...currentRow, id: newId, factor: "New Factor", method: "", evidence: "", status: 'ON_GOING', isPriority: false });
-                setRows(newRows);
+                setRows(prev => {
+                    const currentRow = prev[index];
+                    const newId = prev.length > 0 ? Math.max(...prev.map(r => r.id)) + 1 : 1;
+                    const newRows = [...prev];
+                    newRows.splice(index + 1, 0, { ...currentRow, id: newId, factor: "New Factor", method: "", evidence: "", status: 'ON_GOING', isPriority: false });
+                    return newRows;
+                });
             };
-            const deleteRow = (id) => setRows(rows.filter(r => r.id !== id));
+            const deleteRow = (id) => setRows(prev => prev.filter(r => r.id !== id));
             const addFirstRow = () => setRows([{ id: 1, category: "Primary", cause: "Secondary", factor: "Factor", method: "", evidence: "", status: 'ON_GOING', isPriority: false }]);
             const clearData = () => {
                 if (confirm("Are you sure you want to clear all data?")) {
@@ -793,24 +838,32 @@
                     try { localStorage.removeItem(LOCAL_STORAGE_KEY); } catch (e) {}
                 }
             };
-            const buildExportObject = () => ({
-                problem,
-                problemDesc,
-                rows,
-                notes,
-                version: "3.7-VisualTweaks",
-                exportedAt: new Date().toISOString(),
-            });
+            const buildExportObject = () => {
+                const s = latestRef.current || { problem, problemDesc, rows, notes, baseFontSize };
+                return {
+                    problem: s.problem,
+                    problemDesc: s.problemDesc,
+                    rows: s.rows,
+                    notes: s.notes,
+                    baseFontSize: s.baseFontSize,
+                    version: "3.8-SaveConsistency",
+                    exportedAt: new Date().toISOString(),
+                };
+            };
 
             const saveLocalDraft = () => {
                 // Manual draft save (replaces auto-save): only saved when user triggers Save / Ctrl+S / Download.
                 try {
-                    const dataToSave = { problem, problemDesc, rows, notes, baseFontSize, timestamp: Date.now() };
+                    const s = latestRef.current || { problem, problemDesc, rows, notes, baseFontSize };
+                    const dataToSave = { ...s, timestamp: Date.now() };
                     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(dataToSave));
                 } catch (_) {}
             };
 
-            const suggestedFilename = () => `RCA_${problem.replace(/[^a-z0-9]/gi, '_').substring(0, 20) || 'export'}.json`;
+            const suggestedFilename = () => {
+                const p = (latestRef.current?.problem ?? problem) || 'export';
+                return `RCA_${String(p).replace(/[^a-z0-9]/gi, '_').substring(0, 20) || 'export'}.json`;
+            };
 
             const downloadCopy = () => {
                 saveLocalDraft();
@@ -861,38 +914,50 @@
                 if (data.baseFontSize) setBaseFontSize(data.baseFontSize);
             };
 
-            const pulseFileSaved = () => {
-                setIsFileSaved(true);
-                setTimeout(() => setIsFileSaved(false), 2500);
+            const pulseToast = (text) => {
+                setToast({ show: true, text: String(text || '') });
+                setTimeout(() => setToast({ show: false, text: '' }), 2500);
             };
 
-            const handleSave = async () => {
+            async function handleSave() {
                 // Ctrl+S triggers this too.
+                // Best-effort: blur active element so any pending UI editing commits.
+                try { document.activeElement?.blur?.(); } catch (_) {}
                 saveLocalDraft();
+
                 // Direct overwrite, no confirmation.
-                // NOTE: showSaveFilePicker is blocked inside iframes (especially cross-origin).
                 if (!nativeSaveAvailable) {
                     downloadCopy();
                     return;
                 }
 
+                // Use ref first (prevents stale state when triggered from a long-lived event handler)
+                let handle = saveHandleRef.current || saveHandle;
+
                 try {
-                    let handle = saveHandle;
                     if (!handle) {
                         handle = await pickSaveHandle();
+                        saveHandleRef.current = handle;
                         setSaveHandle(handle);
                         try { await idbSet('saveHandle', handle); } catch (_) {}
                     }
-                    // Direct overwrite (no "overwrite" confirmation from us).
+
+                    // Give React a frame to flush any queued updates
+                    await new Promise(requestAnimationFrame);
+
                     await writeToFileHandle(handle);
-                    pulseFileSaved();
+                    pulseToast('File saved');
                 } catch (err) {
                     if (err?.name === 'AbortError') return;
+                    console.error('Save failed:', err);
                     downloadCopy();
                 }
-            };
+            }
 
-            const handleSaveAs = async () => {
+            // Ensure keyboard shortcut always calls the newest save function
+            handleSaveCallRef.current = handleSave;
+
+            async function handleSaveAs() {
                 saveLocalDraft();
                 // Always choose a new file, then overwrite that chosen file.
                 if (!nativeSaveAvailable) {
@@ -902,15 +967,17 @@
 
                 try {
                     const handle = await pickSaveHandle();
+                    saveHandleRef.current = handle;
                     setSaveHandle(handle);
                     try { await idbSet('saveHandle', handle); } catch (_) {}
                     await writeToFileHandle(handle);
-                    pulseFileSaved();
+                    pulseToast('File saved');
                 } catch (err) {
                     if (err?.name === 'AbortError') return;
+                    console.error('Save As failed:', err);
                     downloadCopy();
                 }
-            };
+            }
             const handleLoad = (e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
@@ -946,7 +1013,7 @@
                         await loadFromFileHandle(handle);
                         setSaveHandle(handle); // Save will now overwrite this opened file
                         try { await idbSet('saveHandle', handle); } catch (_) {}
-                        pulseFileSaved();
+                        pulseToast('File loaded');
                         return;
                     } catch (err) {
                         if (err?.name === 'AbortError') return;
@@ -1188,6 +1255,13 @@
                             </div>
                         </div>
                         <div className="flex gap-4 items-center">
+                            {nativeSaveAvailable && (
+                                <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200 text-xs font-semibold" title="Debug: Ctrl+S capture + last action">
+                                    ⌨️ Ctrl+S: <span className="font-mono">{shortcutHits}</span>
+                                    <span className="text-slate-300">|</span>
+                                    <span className="font-mono">{lastShortcutAction || '—'}</span>
+                                </div>
+                            )}
                             {saveTargetName && (
                                 <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold" title="Current Save Target (Save/Ctrl+S will overwrite this file)">
                                     <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
@@ -1201,9 +1275,9 @@
                                     Native Save disabled in this preview
                                 </div>
                             )}
-                            <div className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all duration-300 ${isFileSaved ? 'opacity-100 bg-blue-100 text-blue-700 scale-105' : 'opacity-0 scale-95'}`}>
+                            <div className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-all duration-300 ${toast.show ? 'opacity-100 bg-blue-100 text-blue-700 scale-105' : 'opacity-0 scale-95'}`}>
                                 <Check size={14} />
-                                File saved
+                                {toast.text || '—'}
                             </div>
                             <div className="h-6 w-px bg-slate-200"></div>
                             <input type="file" ref={fileInputRef} onChange={handleLoad} accept=".json" className="hidden" />
