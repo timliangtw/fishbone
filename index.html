@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fishbone Pro - Auto Fit Canvas</title>
+    <title>Fishbone Pro - Editor Fixed</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -96,7 +96,7 @@
             return metrics.width + 10;
         };
 
-        // --- NEW COMPONENT: HoverExpandTextarea ---
+        // --- HoverExpandTextarea ---
         const HoverTextarea = ({ value, onChange, placeholder }) => {
             const [isExpanded, setIsExpanded] = useState(false);
             const ref = useRef(null);
@@ -140,16 +140,34 @@
             );
         };
 
+        // --- FIXED RichTextEditor ---
         const RichTextEditor = ({ value, onChange }) => {
             const editorRef = useRef(null);
+            
             useEffect(() => {
-                if (editorRef.current && editorRef.current.innerHTML !== value) {
-                    if (value === '' || value === '<p><br></p>' || Math.abs(editorRef.current.innerHTML.length - value.length) > 10) {
-                        editorRef.current.innerHTML = value;
+                // IMPORTANT: Fix for cursor jumping
+                // Only update innerHTML if the element is NOT focused by the user (e.g. initial load or file open)
+                // OR if the value difference is huge (meaning a complete replacement happened)
+                if (editorRef.current) {
+                    const isActive = document.activeElement === editorRef.current;
+                    const currentHTML = editorRef.current.innerHTML;
+                    
+                    // If not focused, or if contents are vastly different (e.g. file load), update DOM.
+                    // If focused and contents are similar, assume user is typing and DO NOT update DOM (preserves cursor).
+                    if (!isActive || Math.abs(currentHTML.length - value.length) > 10) {
+                        if (currentHTML !== value) {
+                            editorRef.current.innerHTML = value;
+                        }
                     }
                 }
             }, [value]);
-            const handleInput = () => editorRef.current && onChange(editorRef.current.innerHTML);
+
+            const handleInput = () => {
+                if (editorRef.current) {
+                    onChange(editorRef.current.innerHTML);
+                }
+            };
+
             const exec = (cmd, val) => { document.execCommand(cmd, false, val); editorRef.current?.focus(); };
             
             const handlePaste = (e) => {
@@ -179,7 +197,14 @@
                         <button onClick={() => exec('foreColor', '#ef4444')} className="w-4 h-4 rounded-full bg-red-500"></button>
                         <button onClick={() => exec('foreColor', '#3b82f6')} className="w-4 h-4 rounded-full bg-blue-500"></button>
                     </div>
-                    <div ref={editorRef} contentEditable className="p-6 min-h-[150px] outline-none text-slate-700 text-sm print:p-0" onInput={handleInput} onPaste={handlePaste} dangerouslySetInnerHTML={{__html: value}} />
+                    {/* REMOVED dangerouslySetInnerHTML to prevent React from re-rendering the DOM on every keystroke */}
+                    <div 
+                        ref={editorRef} 
+                        contentEditable 
+                        className="p-6 min-h-[150px] outline-none text-slate-700 text-sm print:p-0" 
+                        onInput={handleInput} 
+                        onPaste={handlePaste} 
+                    />
                 </div>
             );
         };
